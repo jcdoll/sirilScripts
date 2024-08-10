@@ -1,0 +1,30 @@
+requires 1.2.0
+
+close
+
+# Run from the calibration directory
+# Outputs: calibration/masters/*
+
+# Stack bias frames
+# Ref: https://gitlab.com/free-astro/siril/-/blob/master/scripts/Mono_Preprocessing.ssf
+cd bias/08-05
+convert bias -out=./process
+cd ./process
+stack bias rej 3 3 -nonorm -out=../../../masters/bias_stacked
+cd ../../..
+
+# Stack flat frames
+cd flat/08-05
+convert flat -out=./process
+cd ./process
+calibrate flat -bias=../../../masters/bias_stacked
+stack pp_flat rej 3 3 -norm=mul -out=../../../masters/flat_stacked
+cd ../../..
+
+# Darks
+# TODO: calibration with bias?
+#cd ../../../calibration/dark/08-09
+#convert dark -out=./process
+#cd ../process
+#stack dark rej 3 3 -nonorm -out=../../../masters/dark_stacked
+#cd ..

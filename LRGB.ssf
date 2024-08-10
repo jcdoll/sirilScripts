@@ -1,0 +1,74 @@
+requires 1.2.0
+
+close
+
+cd L
+convert L -out=../process
+cd ../process
+seqsubsky L 1
+register bkg_L -2pass 
+seqapplyreg bkg_L -filter-wfwhm=1.8k
+stack r_bkg_L rej w 3 3 -norm=addscale -fastnorm -out=../stacks/stack_L
+
+cd ../R
+convert R -out=../process
+cd ../process
+seqsubsky R 1
+register bkg_R -2pass 
+seqapplyreg bkg_R -filter-wfwhm=1.8k
+stack r_bkg_R rej w 3 3 -norm=addscale -fastnorm -out=../stacks/stack_R
+
+cd ../G
+convert G -out=../process
+cd ../process
+seqsubsky G 1
+register bkg_G -2pass 
+seqapplyreg bkg_G -filter-wfwhm=1.8k
+stack r_bkg_G rej w 3 3 -norm=addscale -fastnorm -out=../stacks/stack_G
+
+cd ../B
+convert B -out=../process
+cd ../process
+seqsubsky B 1
+register bkg_B -2pass 
+seqapplyreg bkg_B -filter-wfwhm=1.8k
+stack r_bkg_B rej w 3 3 -norm=addscale -fastnorm -out=../stacks/stack_B
+
+cd ../stacks
+convert stacks
+register stacks -2pass
+seqapplyreg stacks -framing=min
+
+# 1 is B, 2 is G, 3 is L, 4 is R in alphabetical order
+load r_stacks_00001
+save B
+load r_stacks_00002
+save G
+load r_stacks_00004
+save R
+load r_stacks_00003
+save L
+
+#deconvolution
+makepsf blind
+rl
+save L_deconv
+
+#compose RGB
+rgbcomp R G B -out=rgb
+load rgb
+
+#compose LRGB
+rgbcomp -lum=L_deconv rgb -out=lrgb
+
+save ..\unstretched_lrgb
+
+#reduce noise using defaults
+denoise
+save ..\unstretched_denoised_lrgb
+#reduce green and stretch
+rmgreen
+autostretch
+mtf 0.20 0.5 1.0
+satu 1 0
+save ..\stretched_lrgb
