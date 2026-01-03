@@ -1,0 +1,108 @@
+# Ref
+# https://siril.readthedocs.io/en/stable/Commands.html
+# Uncalibrated currently looks slightly better, needs more debugging
+
+requires 1.2.0
+
+close
+
+# Start from unstretched SHO
+cd .\stacks
+
+# generate RGB from SHO
+# ref: https://siril.org/tutorials/rgb_composition/
+# ref: https://siril.org/tutorials/pixelmath/
+# ref: https://thecoldestnights.com/2020/06/pixinsight-dynamic-narrowband-combinations-with-pixelmath/
+# ref: https://telescope.live/blog/dynamic-narrowband-combinations-pixelmath
+#pm "($O$^~$O$)*$S$ + ~($O$^~$O$)*$H$"
+#save R
+#pm "(($O$*$H$)^~($O$*$H$))*$H$ + ~(($O$*$H$)^~($O$*$H$))*$O$"
+#save G
+#pm "$O$"
+#save B
+
+# Alt coloring (plain vanilla)
+#pm "$S$"
+#save R
+#pm "$H$"
+#save G
+#pm "$O$"
+#save B
+
+# Basic HOO
+pm "$H$"
+save R
+pm "$O$"
+save G
+pm "$O$"
+save B
+
+# Natural color HOO blend
+pm "$H$"
+save R
+pm "0.2*$H$ + 0.8*$O$"
+save G
+pm "0.15*$H$ + 0.85*$O$"
+save B
+
+# Blue/red SHO mix
+# https://www.cloudynights.com/topic/557828-pixinsights-narrow-band-combinations-with-pixelmath/
+pm "0.76*$H$ + 0.24*$S$"
+save R
+pm "$O$"
+save G
+pm "0.85*$O$ + 0.15*$H$"
+save B
+
+# Blue/gold SHO
+# https://www.cloudynights.com/topic/748564-narrowband-bluegold-color-processing/
+pm "0.7*$S$ + 0.3*$H$"
+save R
+pm "0.3*$S$ + 0.3*$H$ + 0.4*$O$"
+save G
+pm "$O$"
+save B
+
+# Blue/gold HOO
+# https://jonrista.com/the-astrophotographers-guide/pixinsights/narrow-band-combinations-with-pixelmath-hoo/
+#pm "$H$"
+#save R
+#pm "0.85*$H$ + 0.15*$O$"
+#save G
+#pm "0.15*$H$ + 0.85*$O$"
+#save B
+
+# Compose and output
+rgbcomp R G B -out=sho
+load sho
+cd ..\
+save .\unstretchedSHO
+
+# reduce noise using defaults
+# this can lead to background blotches
+# denoise
+# save .\unstretchedSHO_denoised
+
+# save original version
+# - adjust midtone transfer
+# - increase saturation by 100% with no background threshold
+autostretch
+mtf 0.20 0.5 1.0
+satu 1 0
+save .\output
+savetif .\outputSHO -astro -deflate
+savejpg .\outputSHO 90
+
+# save star free version
+load ./unstretchedSHO
+starnet -stretch
+autostretch
+mtf 0.20 0.5 1.0
+satu 1 0
+save .\outputSHO_noStars
+savetif .\outputSHO_noStars -astro -deflate
+savejpg .\outputSHO_noStars 90
+
+
+
+

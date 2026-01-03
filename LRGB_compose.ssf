@@ -1,0 +1,33 @@
+requires 1.2.0
+
+close
+
+# Load previous result
+load .\unstretched_lrgb
+
+#reduce noise using defaults
+#denoise
+#save .\unstretched_denoised_rgb
+
+# save original version
+# - adjust midtone transfer
+# - increase saturation by 100% with no background threshold
+autostretch
+mtf 0.20 0.5 1.0
+satu 1 0
+# rmgreen
+save .\outputRGB
+savetif .\outputRGB -astro -deflate
+savejpg .\outputRGB 90
+
+# save star free version
+load ./unstretched_lrgb
+starnet -stretch
+autostretch
+mtf 0.20 0.5 1.0
+satu 1 0
+rmgreen
+save .\outputRGB_noStars
+savetif .\outputRGB_noStars -astro -deflate
+savejpg .\outputRGB_noStars 90
+

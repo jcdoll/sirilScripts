@@ -1,0 +1,61 @@
+requires 1.2.0
+
+close
+
+# Ref
+# https://siril.readthedocs.io/en/stable/Commands.html
+# Uncalibrated currently looks slightly better, needs more debugging
+
+
+# Load, register and stack SHO images
+cd S
+convert S -out=../process
+cd ../process
+#calibrate S -bias=../../masters/bias -flat=../../masters/flat_S
+seqsubsky S 1
+register bkg_S -2pass 
+seqapplyreg bkg_S -filter-wfwhm=1.8k
+stack r_bkg_S rej w 3 3 -norm=addscale -fastnorm -out=../stacks/stack_S
+cd ..
+
+cd H
+convert H -out=../process
+cd ../process
+#calibrate H -bias=../../masters/bias -flat=../../masters/flat_H
+seqsubsky H 1
+register bkg_H -2pass 
+seqapplyreg bkg_H -filter-wfwhm=1.8k
+stack r_bkg_H rej w 3 3 -norm=addscale -fastnorm -out=../stacks/stack_H
+cd ..
+
+cd O
+convert O -out=../process
+cd ../process
+#calibrate O -bias=../../masters/bias -flat=../../masters/flat_O
+seqsubsky O 1
+register bkg_O -2pass 
+seqapplyreg bkg_O -filter-wfwhm=1.8k
+stack r_bkg_O rej w 3 3 -norm=addscale -fastnorm -out=../stacks/stack_O
+cd ..
+
+# Register stacks
+cd stacks
+convert stacks
+register stacks -2pass
+seqapplyreg stacks -framing=min
+
+# TODO: Do we even need this? Should we just output with the correct names above
+# 1 is H, 2 is O, 3 is S in alphabetical order
+# Linear match O and S to H at the same time before saving
+# https://siril.org/tutorials/rgb_composition/#2-using-pixel-math
+# https://siril.readthedocs.io/en/latest/processing/lmatch.html
+load r_stacks_00001
+save H
+
+load r_stacks_00002
+linear_match H 0 0.92
+save O
+
+load r_stacks_00003
+linear_match H 0 0.92
+save S
