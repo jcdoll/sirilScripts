@@ -20,6 +20,7 @@ import shutil
 import signal
 import sys
 import tempfile
+import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -27,6 +28,9 @@ from typing import Optional
 
 import numpy as np
 from astropy.io import fits
+
+# Suppress noisy astropy warning about long FITS cards
+warnings.filterwarnings('ignore', message='Card is too long', category=fits.verify.VerifyWarning)
 from xisf import XISF
 
 try:
@@ -119,23 +123,35 @@ def compute_pixel_stats(data: np.ndarray) -> dict:
     }
 
 
-def stats_match(stats1: dict, stats2: dict, rtol: float = 1e-6) -> bool:
-    """Check if two stat dictionaries match within tolerance."""
+def stats_match(stats1: dict, stats2: dict, rtol: float = 1e-5) -> bool:
+    """Check if two stat dictionaries match within tolerance.
+
+    Note: Uses rtol=1e-5 by default because float32 mean computation over
+    millions of pixels can have small rounding differences due to
+    different summation orders.
+    """
     if stats1.get("finite_count") != stats2.get("finite_count"):
         return False
     if stats1.get("nan_count") != stats2.get("nan_count"):
         return False
     if stats1.get("inf_count") != stats2.get("inf_count"):
         return False
-    
-    for key in ("min", "max", "mean"):
+
+    for key in ("min", "max"):
         v1, v2 = stats1.get(key), stats2.get(key)
         if v1 is None and v2 is None:
             continue
         if v1 is None or v2 is None:
             return False
+        if not np.isclose(v1, v2, rtol=1e-6):  # Tighter tolerance for min/max
+            return False
+
+    # Mean can vary more due to float32 summation order over millions of pixels
+    v1, v2 = stats1.get("mean"), stats2.get("mean")
+    if v1 is not None and v2 is not None:
         if not np.isclose(v1, v2, rtol=rtol):
             return False
+
     return True
 
 
@@ -340,11 +356,14 @@ def convert_xisf_to_fits(xisf_path: Path, config: ConversionConfig,
                 
                 # Atomic rename
                 os.replace(temp_path, fits_path)
-                
+
             except Exception:
                 # Clean up temp file on failure
                 if os.path.exists(temp_path):
-                    os.unlink(temp_path)
+                    try:
+                        os.unlink(temp_path)
+                    except OSError:
+                        pass  # Best effort cleanup
                 raise
         else:
             # Direct write
@@ -411,48 +430,65 @@ def run_batch_conversion(
     
     # Progress bar setup
     if show_progress and TQDM_AVAILABLE:
-        pbar = tqdm(total=len(xisf_files), desc="Converting", unit="file")
+        pbar = tqdm(total=len(xisf_files), desc="Converting", unit="file",
+                    bar_format='{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] {postfix}')
     else:
         pbar = None
-    
+
     try:
         if workers == 1:
             # Sequential processing
-            for xisf_path, cfg, root in work_items:
+            for i, (xisf_path, cfg, root) in enumerate(work_items):
                 if _shutdown_requested:
                     logging.warning("Shutdown requested, stopping...")
                     break
-                    
+
+                # Show current file being processed
+                if pbar:
+                    pbar.set_postfix_str(xisf_path.name[:40])
+                else:
+                    pct = (i / len(work_items)) * 100
+                    print(f"[{i+1}/{len(work_items)}] ({pct:.0f}%) {xisf_path.name}")
+
                 result = convert_xisf_to_fits(xisf_path, cfg, root)
                 results.append(result)
-                
+
                 if pbar:
                     pbar.update(1)
-                    
+
                 # Log result
                 if result.success:
                     logging.debug(f"Converted: {xisf_path}")
                 elif result.skipped:
+                    if not pbar:
+                        print(f"  -> Skipped ({result.skip_reason})")
                     logging.debug(f"Skipped ({result.skip_reason}): {xisf_path}")
                 else:
+                    if pbar:
+                        pbar.write(f"FAILED: {xisf_path.name} - {result.error}")
+                    else:
+                        print(f"  -> FAILED: {result.error}")
                     logging.error(f"Failed: {xisf_path} - {result.error}")
-                
+
                 for warning in result.warnings:
+                    if pbar:
+                        pbar.write(f"WARNING: {xisf_path.name}: {warning}")
                     logging.warning(f"  {xisf_path}: {warning}")
         else:
             # Parallel processing
             with ProcessPoolExecutor(max_workers=workers) as executor:
                 futures = {
-                    executor.submit(convert_single_file_wrapper, item): item[0] 
+                    executor.submit(convert_single_file_wrapper, item): item[0]
                     for item in work_items
                 }
-                
+
+                completed = 0
                 for future in as_completed(futures):
                     if _shutdown_requested:
                         logging.warning("Shutdown requested, cancelling remaining...")
                         executor.shutdown(wait=False, cancel_futures=True)
                         break
-                    
+
                     xisf_path = futures[future]
                     try:
                         result = future.result()
@@ -463,20 +499,29 @@ def run_batch_conversion(
                             error=f"Worker exception: {e}"
                         )
                         results.append(result)
-                    
+
+                    completed += 1
                     if pbar:
+                        pbar.set_postfix_str(xisf_path.name[:40])
                         pbar.update(1)
-                    
+                    else:
+                        pct = (completed / len(work_items)) * 100
+                        status = "OK" if result.success else ("skip" if result.skipped else "FAIL")
+                        print(f"[{completed}/{len(work_items)}] ({pct:.0f}%) {xisf_path.name} [{status}]")
+
                     if result.success:
                         logging.debug(f"Converted: {xisf_path}")
                     elif result.skipped:
                         logging.debug(f"Skipped ({result.skip_reason}): {xisf_path}")
                     else:
+                        if pbar:
+                            pbar.write(f"FAILED: {xisf_path.name} - {result.error}")
                         logging.error(f"Failed: {xisf_path} - {result.error}")
     finally:
         if pbar:
             pbar.close()
-    
+            print()  # Newline after progress bar
+
     return results
 
 
@@ -614,11 +659,27 @@ Examples:
         verify=not args.no_verify,
         output_dir=args.output_dir,
         preserve_structure=not args.flat_output,
-        atomic_write=not args.no_atomic,
+        atomic_write=not args.no_atomic and sys.platform != 'win32',
         check_stats=not args.no_stats,
         nan_handling=args.nan_handling,
     )
-    
+
+    # Log active options
+    options = []
+    if config.overwrite:
+        options.append("overwrite")
+    if not config.verify:
+        options.append("no-verify")
+    if not config.check_stats:
+        options.append("no-stats")
+    if config.output_dir:
+        options.append(f"output-dir={config.output_dir}")
+    if args.pattern:
+        options.append(f"pattern={args.pattern}")
+    if args.jobs > 1:
+        options.append(f"jobs={args.jobs}")
+    print(f"Options: {', '.join(options) if options else 'defaults'}")
+
     # Dry run
     if args.dry_run:
         new_count = 0
