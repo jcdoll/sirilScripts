@@ -574,7 +574,8 @@ Examples:
     # Setup
     setup_logging(args.verbose, args.log_file)
     signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
+    if hasattr(signal, 'SIGTERM'):  # Not available on Windows
+        signal.signal(signal.SIGTERM, signal_handler)
     
     # Validate inputs
     if not args.directory.exists():
@@ -602,11 +603,11 @@ Examples:
                                   pattern=args.pattern)
     
     if not xisf_files:
-        logging.info(f"No .xisf files found in {args.directory}")
+        print(f"No .xisf files found in {args.directory}")
         sys.exit(0)
-    
-    logging.info(f"Found {len(xisf_files)} XISF file(s)")
-    
+
+    print(f"Found {len(xisf_files)} XISF file(s) in {args.directory}")
+
     # Build config
     config = ConversionConfig(
         overwrite=args.overwrite,
@@ -620,12 +621,35 @@ Examples:
     
     # Dry run
     if args.dry_run:
-        print("\nDry run - files that would be converted:")
+        new_count = 0
+        exists_count = 0
+        total_size = 0
+
+        print("\nDry run - files that would be converted:\n")
         for xisf_path in xisf_files:
             output_path = get_output_path(xisf_path, config, args.directory)
-            status = "[exists]" if output_path.exists() else "[new]"
-            print(f"  {xisf_path}")
+            file_size = xisf_path.stat().st_size
+            total_size += file_size
+
+            if output_path.exists():
+                exists_count += 1
+                status = "[exists - skip]" if not config.overwrite else "[exists - overwrite]"
+            else:
+                new_count += 1
+                status = "[new]"
+
+            print(f"  {xisf_path.name}")
             print(f"    -> {output_path} {status}")
+
+        print(f"\n{'='*50}")
+        print("DRY RUN SUMMARY")
+        print(f"{'='*50}")
+        print(f"  Total files:     {len(xisf_files)}")
+        print(f"  To convert:      {new_count if not config.overwrite else len(xisf_files)}")
+        print(f"  Already exist:   {exists_count}")
+        print(f"  Total size:      {total_size / (1024*1024):.1f} MB")
+        if exists_count > 0 and not config.overwrite:
+            print(f"\n  Use --overwrite to reconvert existing files")
         sys.exit(0)
     
     # Run conversion
