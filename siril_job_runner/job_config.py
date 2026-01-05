@@ -21,6 +21,7 @@ class JobOptions:
     temp_tolerance: float = 2.0
     denoise: bool = False
     palette: str = "HOO"
+    dark_temp_override: Optional[float] = None  # Force using darks at this temperature
 
 
 @dataclass
@@ -54,6 +55,7 @@ class JobConfig:
             temp_tolerance=options_data.get("temp_tolerance", 2.0),
             denoise=options_data.get("denoise", False),
             palette=options_data.get("palette", "HOO"),
+            dark_temp_override=options_data.get("dark_temp_override"),
         )
 
         return cls(
@@ -99,6 +101,19 @@ class JobConfig:
 def load_job(path: Path) -> JobConfig:
     """Load a job configuration file."""
     return JobConfig.from_file(path)
+
+
+def load_settings(repo_root: Path) -> dict:
+    """
+    Load user settings from settings.json.
+
+    Returns empty dict if file doesn't exist.
+    """
+    settings_path = Path(repo_root) / "settings.json"
+    if settings_path.exists():
+        with open(settings_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
 
 
 def validate_job_file(path: Path) -> tuple[bool, Optional[str]]:

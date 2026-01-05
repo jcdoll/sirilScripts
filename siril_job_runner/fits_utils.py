@@ -5,7 +5,6 @@ FITS header reading utilities for Siril job processing.
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
-from collections import defaultdict
 
 try:
     from astropy.io import fits
@@ -121,65 +120,6 @@ def scan_multiple_directories(directories: list[Path], pattern: str = "*.fit*") 
     for directory in directories:
         frames.extend(scan_directory(directory, pattern))
     return frames
-
-
-@dataclass
-class RequirementsEntry:
-    """Entry in the requirements table."""
-
-    filter_name: str
-    exposure: float
-    temperature: float
-    count: int
-
-    @property
-    def exposure_str(self) -> str:
-        return f"{int(self.exposure)}s"
-
-    @property
-    def temp_str(self) -> str:
-        return f"{int(round(self.temperature))}C"
-
-
-def build_requirements_table(frames: list[FrameInfo]) -> list[RequirementsEntry]:
-    """
-    Build a requirements table from a list of frames.
-
-    Groups frames by (filter, exposure, temperature) and counts them.
-    """
-    counts: dict[tuple[str, float, float], int] = defaultdict(int)
-
-    for frame in frames:
-        # Round temperature to nearest integer for grouping
-        rounded_temp = round(frame.temperature)
-        key = (frame.filter_name, frame.exposure, rounded_temp)
-        counts[key] += 1
-
-    entries = []
-    for (filter_name, exposure, temp), count in sorted(counts.items()):
-        entries.append(RequirementsEntry(
-            filter_name=filter_name,
-            exposure=exposure,
-            temperature=temp,
-            count=count,
-        ))
-
-    return entries
-
-
-def get_unique_exposures(frames: list[FrameInfo]) -> set[float]:
-    """Get unique exposure times from frames."""
-    return {frame.exposure for frame in frames}
-
-
-def get_unique_temperatures(frames: list[FrameInfo]) -> set[float]:
-    """Get unique temperatures from frames (rounded to int)."""
-    return {round(frame.temperature) for frame in frames}
-
-
-def get_unique_filters(frames: list[FrameInfo]) -> set[str]:
-    """Get unique filter names from frames."""
-    return {frame.filter_name for frame in frames}
 
 
 def temperatures_match(temp1: float, temp2: float, tolerance: float = 2.0) -> bool:

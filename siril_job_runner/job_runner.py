@@ -4,19 +4,19 @@ Job runner - orchestrates the full processing pipeline.
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Protocol
+from typing import Optional
 
 from .calibration import CalibrationManager, CalibrationDates
+from .protocols import SirilInterface
 from .composition import compose_and_stretch
-from .fits_utils import scan_multiple_directories, build_requirements_table, FrameInfo
+from .fits_utils import scan_multiple_directories, FrameInfo
+from .frame_analysis import (
+    build_requirements_table, build_date_summary_table,
+    format_date_summary_table, get_unique_filters
+)
 from .job_config import JobConfig, load_job
 from .logger import JobLogger
 from .preprocessing import preprocess_with_exposure_groups
-
-
-class SirilInterface(Protocol):
-    """Protocol for Siril interface."""
-    pass  # Methods defined in other modules
 
 
 @dataclass
@@ -73,6 +73,12 @@ class JobRunner:
         self._dark_masters: dict[tuple[float, float], Path] = {}
         self._flat_masters: dict[str, Path] = {}
 
+    def _get_dark_temp(self, actual_temp: float) -> float:
+        """Get temperature to use for dark matching (override if set)."""
+        if self.config.options.dark_temp_override is not None:
+            return self.config.options.dark_temp_override
+        return actual_temp
+
     def validate(self) -> ValidationResult:
         """
         Validate the job - scan frames and check calibration.
@@ -99,6 +105,18 @@ class JobRunner:
                 message="No light frames found",
             )
 
+        # Show date summary table
+        date_summary = build_date_summary_table(all_frames)
+        all_filters = sorted(get_unique_filters(all_frames))
+        # Reorder filters to put common ones first: L, R, G, B, H, S, O
+        filter_order = ["L", "R", "G", "B", "H", "S", "O"]
+        ordered_filters = [f for f in filter_order if f in all_filters]
+        ordered_filters += [f for f in all_filters if f not in filter_order]
+
+        self.logger.step("Frames by date:")
+        for line in format_date_summary_table(date_summary, ordered_filters):
+            self.logger.info(line)
+
         # Build requirements table
         requirements = build_requirements_table(all_frames)
         self.logger.step("Requirements:")
@@ -118,8 +136,8 @@ class JobRunner:
         elif not status.exists and status.can_build:
             buildable.append("bias")
 
-        # Check darks for each exposure/temp combo
-        dark_combos = {(req.exposure, req.temperature) for req in requirements}
+        # Check darks for each exposure/temp combo (with override if set)
+        dark_combos = {(req.exposure, self._get_dark_temp(req.temperature)) for req in requirements}
         for exp, temp in dark_combos:
             status = self.cal_manager.check_dark(exp, temp)
             if not status.exists and not status.can_build:
@@ -167,8 +185,8 @@ class JobRunner:
 
         self.logger.step("Building calibration masters...")
 
-        # Get unique requirements
-        dark_combos = {(req.exposure, req.temperature) for req in validation.requirements}
+        # Get unique requirements (with temp override if set)
+        dark_combos = {(req.exposure, self._get_dark_temp(req.temperature)) for req in validation.requirements}
         filters = {req.filter_name for req in validation.requirements}
 
         # Build bias master (single, no temperature dependency)
@@ -195,11 +213,12 @@ class JobRunner:
         # Bias is universal (no temperature dependency)
         bias = self._bias_master
 
-        # Find dark with matching exposure and temperature tolerance
+        # Find dark with matching exposure (use override temp if set)
+        dark_temp = self._get_dark_temp(temp)
         dark = None
         for (cached_exp, cached_temp), path in self._dark_masters.items():
             if (cached_exp == exposure and
-                    abs(cached_temp - temp) <= self.config.options.temp_tolerance):
+                    abs(cached_temp - dark_temp) <= self.config.options.temp_tolerance):
                 dark = path
                 break
 

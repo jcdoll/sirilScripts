@@ -17,7 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from siril_job_runner.job_runner import JobRunner
-from siril_job_runner.job_config import validate_job_file
+from siril_job_runner.job_config import validate_job_file, load_settings
 
 
 def get_siril_interface():
@@ -99,11 +99,20 @@ Examples:
         sys.exit(1)
 
     # Determine base path
+    repo_root = Path(__file__).parent
     if args.base_path:
         base_path = args.base_path
     else:
-        # Default to grandparent of job file (assumes jobs/ subdirectory)
-        base_path = args.job_file.parent.parent
+        # Try to load from settings.json
+        settings = load_settings(repo_root)
+        if "base_path" in settings:
+            base_path = Path(settings["base_path"])
+        else:
+            print("ERROR: No base_path specified.")
+            print("Either:")
+            print("  1. Use --base-path argument")
+            print("  2. Create settings.json with base_path (copy from settings.template.json)")
+            sys.exit(1)
 
     # Get Siril interface
     siril = None
