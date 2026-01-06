@@ -5,6 +5,7 @@ Handles per-channel preprocessing: convert, calibrate, subsky, register, stack.
 Supports stacking by exposure for HDR workflows.
 """
 
+import os
 import shutil
 from collections import defaultdict
 from dataclasses import dataclass
@@ -14,6 +15,42 @@ from typing import Optional
 from .fits_utils import FrameInfo
 from .logger import JobLogger
 from .protocols import SirilInterface
+
+
+def link_or_copy(src: Path, dest: Path) -> None:
+    """Hard link if possible, otherwise copy."""
+    try:
+        os.link(src, dest)
+    except OSError:
+        # Cross-device link or unsupported filesystem, fall back to copy
+        shutil.copy2(src, dest)
+
+
+def create_sequence_file(seq_path: Path, num_images: int, seq_name: str) -> None:
+    """
+    Create a Siril .seq file directly.
+
+    Format matches pysiril's CreateSeqFile output:
+    - Header comments
+    - S line: sequence metadata (fixed_len=5 for 5-digit numbering)
+    - L line: layer count (-1 = auto)
+    - I lines: one per image (index, included flag)
+    """
+    with open(seq_path, "w", newline="") as f:
+        f.write(
+            "#Siril sequence file. "
+            "Contains list of files (images), selection, and registration data\n"
+        )
+        f.write(
+            "#S 'sequence_name' start_index nb_images nb_selected "
+            "fixed_len reference_image version\n"
+        )
+        # S 'name' start nb_images nb_selected fixed_len ref_image version
+        # fixed_len=5 means 5-digit numbering (00001, 00002, etc.)
+        f.write(f"S '{seq_name}' 1 {num_images} {num_images} 5 -1 1\n")
+        f.write("L -1\n")
+        for i in range(1, num_images + 1):
+            f.write(f"I {i} 1\n")
 
 
 @dataclass
@@ -103,21 +140,6 @@ class Preprocessor:
                 f"Cleaned {removed} old files/dirs from {process_dir.name}"
             )
 
-    def _check_dest_clear(self, process_dir: Path) -> None:
-        """Verify destination directory has no conflicting files before convert."""
-        # Check for any .fits/.fit files directly in process_dir (not in source/)
-        conflicts = []
-        for pattern in ["*.fits", "*.fit", "*.seq"]:
-            for f in process_dir.glob(pattern):
-                if f.parent == process_dir:
-                    conflicts.append(f.name)
-
-        if conflicts:
-            raise RuntimeError(
-                f"Destination not clear: {len(conflicts)} files in {process_dir}. "
-                f"First few: {conflicts[:5]}"
-            )
-
     def process_stack_group(
         self,
         group: StackGroup,
@@ -148,13 +170,12 @@ class Preprocessor:
         # Clean any leftover files from previous runs
         self._clean_process_dir(process_dir)
 
-        # Copy frames to working directory
-        source_dir = self._prepare_frames(group, process_dir)
+        # Link frames to working directory
+        num_frames = self._prepare_frames(group, process_dir)
 
         # Run preprocessing pipeline
         stack_path = self._run_pipeline(
-            seq_name=f"{group.filter_name}_{group.exposure_str}",
-            source_dir=source_dir,
+            num_frames=num_frames,
             process_dir=process_dir,
             stacks_dir=stacks_dir,
             stack_name=group.stack_name,
@@ -165,44 +186,40 @@ class Preprocessor:
 
         return stack_path
 
-    def _prepare_frames(self, group: StackGroup, process_dir: Path) -> Path:
-        """Copy frames to working directory with consistent naming."""
+    def _prepare_frames(self, group: StackGroup, process_dir: Path) -> int:
+        """Link frames to working directory with sequential naming."""
         self._log("Preparing frames...")
 
-        source_dir = process_dir / "source"
-        source_dir.mkdir(parents=True, exist_ok=True)
-
-        copied_count = 0
+        linked_count = 0
         for i, frame in enumerate(group.frames, 1):
             src = frame.path
             if not src.exists():
                 raise FileNotFoundError(f"Source frame not found: {src}")
 
-            # Use sequential naming for Siril compatibility
-            suffix = src.suffix
-            dest = source_dir / f"light_{i:04d}{suffix}"
+            # Use 5-digit sequential naming to match .seq format (fixed_len=5)
+            # No underscore between name and number: light00001.fit
+            dest = process_dir / f"light{i:05d}.fit"
             if not dest.exists():
-                shutil.copy2(src, dest)
+                link_or_copy(src, dest)
 
-            # Verify copy succeeded
+            # Verify link/copy succeeded
             if not dest.exists():
-                raise IOError(f"Failed to copy frame to: {dest}")
-            copied_count += 1
+                raise IOError(f"Failed to link/copy frame to: {dest}")
+            linked_count += 1
 
-        # Verify we have files in the source directory
-        fit_files = list(source_dir.glob("light_*.fit*"))
+        # Verify we have files in the process directory
+        fit_files = list(process_dir.glob("light*.fit"))
         if not fit_files:
-            raise FileNotFoundError(f"No light frames found in {source_dir}")
+            raise FileNotFoundError(f"No light frames found in {process_dir}")
 
         self._log_detail(
-            f"Prepared {copied_count} frames ({len(fit_files)} files in {source_dir})"
+            f"Prepared {linked_count} frames ({len(fit_files)} files in {process_dir})"
         )
-        return source_dir
+        return linked_count
 
     def _run_pipeline(
         self,
-        seq_name: str,
-        source_dir: Path,
+        num_frames: int,
         process_dir: Path,
         stacks_dir: Path,
         stack_name: str,
@@ -223,15 +240,11 @@ class Preprocessor:
                     f"Calibration master not found: {name} at {path}"
                 )
 
-        # Verify destination is clear before convert
-        self._check_dest_clear(process_dir)
-
-        # Step 1: Convert
-        self._log("Converting...")
-        if not self.siril.cd(str(source_dir)):
-            raise RuntimeError(f"Failed to cd to source directory: {source_dir}")
-        if not self.siril.convert("light", out=str(process_dir)):
-            raise RuntimeError(f"Failed to convert light frames in {source_dir}")
+        # Step 1: Create sequence file (replaces Siril's convert command)
+        # Files are already named light_00001.fit, light_00002.fit, etc.
+        seq_path = process_dir / "light.seq"
+        self._log("Creating sequence file...")
+        create_sequence_file(seq_path, num_frames, "light")
 
         # Step 2: Calibrate
         self._log("Calibrating...")

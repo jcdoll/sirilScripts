@@ -6,7 +6,6 @@ import shutil
 import tempfile
 import warnings
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 from astropy.io import fits
@@ -74,7 +73,7 @@ def stats_match(stats1: dict, stats2: dict, rtol: float = 1e-5) -> bool:
 
 
 def get_output_path(input_path: Path, config: ConversionConfig,
-                    root_dir: Optional[Path] = None) -> Path:
+                    root_dir: Path | None = None) -> Path:
     """Determine output path for a given input file."""
     if config.output_dir is None:
         return input_path.with_suffix('.fits')
@@ -89,7 +88,7 @@ def get_output_path(input_path: Path, config: ConversionConfig,
 
 
 def convert_xisf_to_fits(xisf_path: Path, config: ConversionConfig,
-                         root_dir: Optional[Path] = None) -> ConversionResult:
+                         root_dir: Path | None = None) -> ConversionResult:
     """Convert a single XISF file to FITS format."""
     result = ConversionResult(input_path=xisf_path)
 
@@ -135,7 +134,7 @@ def convert_xisf_to_fits(xisf_path: Path, config: ConversionConfig,
             return result
 
         if arr_width != meta_width or arr_height != meta_height or arr_channels != meta_channels:
-            result.error = f"Dimension mismatch: metadata vs array"
+            result.error = "Dimension mismatch: metadata vs array"
             return result
 
         nan_count = np.sum(np.isnan(im_data))
@@ -161,6 +160,10 @@ def convert_xisf_to_fits(xisf_path: Path, config: ConversionConfig,
 
         if im_data.ndim == 3:
             im_data = np.moveaxis(im_data, -1, 0)
+            # Squeeze out single channel for mono images: (1, H, W) -> (H, W)
+            # Siril expects mono FITS to be 2D, not 3D with NAXIS3=1
+            if im_data.shape[0] == 1:
+                im_data = im_data.squeeze(axis=0)
 
         result.output_shape = im_data.shape
 
@@ -168,6 +171,13 @@ def convert_xisf_to_fits(xisf_path: Path, config: ConversionConfig,
 
         if 'FITSKeywords' in meta:
             skip_keywords = {'SIMPLE', 'BITPIX', 'NAXIS', 'NAXIS1', 'NAXIS2', 'NAXIS3', 'EXTEND'}
+            # If output is 2D, skip axis-3 WCS keywords (invalid after squeezing mono)
+            if im_data.ndim == 2:
+                skip_keywords.update({
+                    'CRPIX3', 'CRVAL3', 'CTYPE3', 'CDELT3', 'CUNIT3',
+                    'CD3_1', 'CD3_2', 'CD3_3', 'CD1_3', 'CD2_3',
+                    'PC3_1', 'PC3_2', 'PC3_3', 'PC1_3', 'PC2_3',
+                })
             for keyword, values_list in meta['FITSKeywords'].items():
                 if keyword.upper() in skip_keywords:
                     continue
@@ -193,7 +203,7 @@ def convert_xisf_to_fits(xisf_path: Path, config: ConversionConfig,
                     with fits.open(temp_path) as verify_hdu:
                         verify_data = verify_hdu[0].data
                         if verify_data.shape != result.output_shape:
-                            raise ValueError(f"Verification failed: shape mismatch")
+                            raise ValueError("Verification failed: shape mismatch")
 
                         if config.check_stats:
                             if verify_data.ndim == 3:
@@ -205,7 +215,7 @@ def convert_xisf_to_fits(xisf_path: Path, config: ConversionConfig,
                             result.pixel_stats["output"] = output_stats
 
                             if not stats_match(input_stats, output_stats):
-                                raise ValueError(f"Verification failed: pixel stats mismatch")
+                                raise ValueError("Verification failed: pixel stats mismatch")
 
                 os.replace(temp_path, fits_path)
 
