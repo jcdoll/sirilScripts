@@ -89,13 +89,13 @@ def read_fits_header(path: Path) -> Optional[FrameInfo]:
         return None
 
 
-def scan_directory(directory: Path, pattern: str = "*.fit*") -> list[FrameInfo]:
+def scan_directory(directory: Path, pattern: str = "*.fit") -> list[FrameInfo]:
     """
     Scan a directory for FITS files and read their headers.
 
     Args:
         directory: Directory to scan
-        pattern: Glob pattern for FITS files (default: *.fit*)
+        pattern: Glob pattern for FITS files (default: *.fit)
 
     Returns:
         List of FrameInfo for successfully read files
@@ -114,7 +114,7 @@ def scan_directory(directory: Path, pattern: str = "*.fit*") -> list[FrameInfo]:
     return frames
 
 
-def scan_multiple_directories(directories: list[Path], pattern: str = "*.fit*") -> list[FrameInfo]:
+def scan_multiple_directories(directories: list[Path], pattern: str = "*.fit") -> list[FrameInfo]:
     """Scan multiple directories and combine results."""
     frames = []
     for directory in directories:

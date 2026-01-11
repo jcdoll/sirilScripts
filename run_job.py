@@ -11,13 +11,34 @@ Usage:
 
 import argparse
 import sys
+from datetime import datetime
 from pathlib import Path
+
+
+class TeeWriter:
+    """Write to both stdout and a file."""
+
+    def __init__(self, file_path: Path):
+        self.file = open(file_path, "w", encoding="utf-8")
+        self.stdout = sys.stdout
+
+    def write(self, data):
+        self.stdout.write(data)
+        self.file.write(data)
+        self.file.flush()
+
+    def flush(self):
+        self.stdout.flush()
+        self.file.flush()
+
+    def close(self):
+        self.file.close()
 
 # Add project root to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
+from siril_job_runner.job_config import load_settings, validate_job_file
 from siril_job_runner.job_runner import JobRunner
-from siril_job_runner.job_config import validate_job_file, load_settings
 
 
 def get_siril_interface():
@@ -28,6 +49,7 @@ def get_siril_interface():
     """
     try:
         from pysiril.siril import Siril
+
         from siril_job_runner.siril_wrapper import SirilWrapper
 
         siril = Siril()
@@ -89,7 +111,26 @@ Examples:
         help="Base path for data (default: parent of job file)",
     )
 
+    parser.add_argument(
+        "--log",
+        action="store_true",
+        help="Write output to timestamped log file in logs/ folder",
+    )
+
     args = parser.parse_args()
+
+    # Set up logging to file if requested
+    tee = None
+    if args.log:
+        logs_dir = Path(__file__).parent / "logs"
+        logs_dir.mkdir(exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        job_name = args.job_file.stem
+        log_path = logs_dir / f"{job_name}_{timestamp}.log"
+        tee = TeeWriter(log_path)
+        sys.stdout = tee
+        sys.stderr = tee
+        print(f"Logging to: {log_path}")
 
     # Validate job file exists
     if not args.job_file.exists():
@@ -192,6 +233,12 @@ Examples:
                 siril_raw.Close()
             except Exception:
                 pass
+
+        # Close log file
+        if tee is not None:
+            sys.stdout = tee.stdout
+            sys.stderr = tee.stdout
+            tee.close()
 
 
 if __name__ == "__main__":

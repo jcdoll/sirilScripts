@@ -1,13 +1,13 @@
 [project]
 name = "xisf2fits"
-version = "1.0.0"
+version = "2.0.0"
+description = "Batch convert XISF files to FITS using Siril"
 requires-python = ">=3.10"
 dependencies = [
-    "xisf>=0.9.0",
-    "astropy>=5.0",
-    "numpy>=1.21",
     "tqdm>=4.60",
 ]
+# Note: pysiril is required but comes bundled with Siril 1.2+
+# It is not available on PyPI
 
 [tool.uv]
 dev-dependencies = [
