@@ -46,12 +46,14 @@ def build_requirements_table(frames: list[FrameInfo]) -> list[RequirementsEntry]
 
     entries = []
     for (filter_name, exposure, temp), count in sorted(counts.items()):
-        entries.append(RequirementsEntry(
-            filter_name=filter_name,
-            exposure=exposure,
-            temperature=temp,
-            count=count,
-        ))
+        entries.append(
+            RequirementsEntry(
+                filter_name=filter_name,
+                exposure=exposure,
+                temperature=temp,
+                count=count,
+            )
+        )
 
     return entries
 
@@ -90,7 +92,7 @@ def _extract_date_from_path(path: Path) -> Optional[str]:
     parts = path.parts
     # Look for a part matching date pattern YYYY_MM_DD
     for part in parts:
-        if len(part) == 10 and part[4] == '_' and part[7] == '_':
+        if len(part) == 10 and part[4] == "_" and part[7] == "_":
             try:
                 int(part[:4])  # year
                 int(part[5:7])  # month
@@ -141,23 +143,27 @@ def build_date_summary_table(frames: list[FrameInfo]) -> list[DateSummaryEntry]:
                 # Multiple exposures - show as "long+short*"
                 sorted_exps = sorted(exp_counts.items(), reverse=True)
                 parts = []
-                for i, (exp, count) in enumerate(sorted_exps):
+                for i, (_exp, count) in enumerate(sorted_exps):
                     if i == 0:
                         parts.append(str(count))
                     else:
                         parts.append(f"{count}*")
                 filter_counts[filter_name] = "+".join(parts)
 
-        entries.append(DateSummaryEntry(
-            date=date,
-            temperature=temp,
-            filter_counts=filter_counts,
-        ))
+        entries.append(
+            DateSummaryEntry(
+                date=date,
+                temperature=temp,
+                filter_counts=filter_counts,
+            )
+        )
 
     return entries
 
 
-def format_date_summary_table(entries: list[DateSummaryEntry], filters: list[str]) -> list[str]:
+def format_date_summary_table(
+    entries: list[DateSummaryEntry], filters: list[str]
+) -> list[str]:
     """
     Format date summary as ASCII table lines.
 

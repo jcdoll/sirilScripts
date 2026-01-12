@@ -2,11 +2,10 @@
 Logging and progress reporting for Siril job processing.
 """
 
-import sys
 import time
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from contextlib import contextmanager
 from typing import Optional, TextIO
 
 
@@ -28,7 +27,7 @@ class JobLogger:
         output_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         log_path = output_dir / f"job_log_{job_name}_{timestamp}.txt"
-        self.log_file = open(log_path, "w", encoding="utf-8")
+        self.log_file = open(log_path, "w", encoding="utf-8")  # noqa: SIM115
         self._write_to_file(f"Job started: {datetime.now().isoformat()}")
         self._write_to_file(f"Job name: {job_name}")
         self._write_to_file("-" * 60)
@@ -97,7 +96,9 @@ class JobLogger:
         self._output(header_line)
         self._output(separator)
         for row in rows:
-            row_line = " | ".join(str(cell).ljust(widths[i]) for i, cell in enumerate(row))
+            row_line = " | ".join(
+                str(cell).ljust(widths[i]) for i, cell in enumerate(row)
+            )
             self._output(row_line)
 
     @contextmanager
@@ -148,9 +149,6 @@ def print_completion_summary(
     2. Linear file for manual VeraLux processing
     3. Linear stacks for advanced re-processing
     """
-    # Determine type-specific names
-    type_lower = job_type.lower()
-
     # Get list of stack files
     stack_files = sorted(stacks_dir.glob("stack_*.fit"))
 
@@ -188,16 +186,18 @@ def print_completion_summary(
     for stack_file in stack_files:
         lines.append(f" {stack_file}")
 
-    lines.extend([
-        "",
-        " Use these if you want to:",
-        "   - Re-compose with different linear_match settings",
-        "   - Apply different deconvolution to L",
-        "   - Process channels individually before composing",
-        "",
-        "=" * 68,
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            " Use these if you want to:",
+            "   - Re-compose with different linear_match settings",
+            "   - Apply different deconvolution to L",
+            "   - Process channels individually before composing",
+            "",
+            "=" * 68,
+            "",
+        ]
+    )
 
     # Print all lines
     for line in lines:
@@ -205,6 +205,8 @@ def print_completion_summary(
 
 
 # Convenience function for simple logging without file output
-def create_logger(output_dir: Optional[Path] = None, job_name: str = "job") -> JobLogger:
+def create_logger(
+    output_dir: Optional[Path] = None, job_name: str = "job"
+) -> JobLogger:
     """Create a new JobLogger instance."""
     return JobLogger(output_dir, job_name)

@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from .config import CLIPPING
+
 try:
     from astropy.io import fits
 except ImportError:
@@ -55,7 +57,9 @@ def read_fits_header(path: Path) -> Optional[FrameInfo]:
     Returns None if file cannot be read or required info is missing.
     """
     if fits is None:
-        raise ImportError("astropy is required for FITS reading. Install with: pip install astropy")
+        raise ImportError(
+            "astropy is required for FITS reading. Install with: pip install astropy"
+        )
 
     path = Path(path)
     if not path.exists():
@@ -114,7 +118,9 @@ def scan_directory(directory: Path, pattern: str = "*.fit") -> list[FrameInfo]:
     return frames
 
 
-def scan_multiple_directories(directories: list[Path], pattern: str = "*.fit") -> list[FrameInfo]:
+def scan_multiple_directories(
+    directories: list[Path], pattern: str = "*.fit"
+) -> list[FrameInfo]:
     """Scan multiple directories and combine results."""
     frames = []
     for directory in directories:
@@ -125,3 +131,89 @@ def scan_multiple_directories(directories: list[Path], pattern: str = "*.fit") -
 def temperatures_match(temp1: float, temp2: float, tolerance: float = 2.0) -> bool:
     """Check if two temperatures match within tolerance."""
     return abs(temp1 - temp2) <= tolerance
+
+
+@dataclass
+class ClippingInfo:
+    """Information about clipping in an image."""
+
+    path: Path
+    total_pixels: int
+    clipped_low: int  # Pixels clipped to black (near 0)
+    clipped_high: int  # Pixels clipped to white (near max)
+    bit_depth: int
+
+    @property
+    def clipped_low_percent(self) -> float:
+        """Percentage of pixels clipped to black."""
+        if self.total_pixels == 0:
+            return 0.0
+        return 100.0 * self.clipped_low / self.total_pixels
+
+    @property
+    def clipped_high_percent(self) -> float:
+        """Percentage of pixels clipped to white."""
+        if self.total_pixels == 0:
+            return 0.0
+        return 100.0 * self.clipped_high / self.total_pixels
+
+
+def check_clipping(path: Path) -> Optional[ClippingInfo]:
+    """
+    Check a FITS file for clipped pixels (both black and white).
+
+    Returns:
+        ClippingInfo with clipping statistics, or None if file cannot be read
+    """
+    if fits is None:
+        raise ImportError("astropy is required for FITS reading")
+
+    path = Path(path)
+    if not path.exists():
+        return None
+
+    try:
+        with fits.open(path) as hdul:
+            data = hdul[0].data
+            if data is None:
+                return None
+
+            import numpy as np
+
+            # Determine thresholds based on dtype
+            if data.dtype == np.uint16:
+                bit_depth = 16
+                low_threshold = CLIPPING.low_16bit
+                high_threshold = CLIPPING.high_16bit
+            elif data.dtype == np.uint8:
+                bit_depth = 8
+                low_threshold = CLIPPING.low_8bit
+                high_threshold = CLIPPING.high_8bit
+            elif data.dtype in (np.float32, np.float64):
+                bit_depth = 16
+                max_val = float(data.max())
+                if max_val <= 1.5:  # Normalized data
+                    low_threshold = CLIPPING.low_float
+                    high_threshold = CLIPPING.high_float
+                else:
+                    low_threshold = CLIPPING.low_16bit
+                    high_threshold = CLIPPING.high_16bit
+            else:
+                bit_depth = 16
+                low_threshold = CLIPPING.low_16bit
+                high_threshold = CLIPPING.high_16bit
+
+            total_pixels = data.size
+            clipped_low = int((data <= low_threshold).sum())
+            clipped_high = int((data >= high_threshold).sum())
+
+            return ClippingInfo(
+                path=path,
+                total_pixels=total_pixels,
+                clipped_low=clipped_low,
+                clipped_high=clipped_high,
+                bit_depth=bit_depth,
+            )
+
+    except Exception:
+        return None

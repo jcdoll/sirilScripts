@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from .config import PROCESSING, STACKING
 from .fits_utils import FrameInfo
 from .logger import JobLogger
 from .protocols import SirilInterface
@@ -103,7 +104,7 @@ class Preprocessor:
         self,
         siril: SirilInterface,
         logger: Optional[JobLogger] = None,
-        fwhm_filter: float = 1.8,
+        fwhm_filter: float = PROCESSING.fwhm_filter,
     ):
         self.siril = siril
         self.logger = logger
@@ -281,11 +282,11 @@ class Preprocessor:
         stack_path = stacks_dir / f"{stack_name}.fit"
         if not self.siril.stack(
             "r_bkg_pp_light",
-            "rej",
-            "w",
-            "3",
-            "3",
-            norm="addscale",
+            STACKING.rejection,
+            STACKING.weighting,
+            STACKING.sigma_low,
+            STACKING.sigma_high,
+            norm=STACKING.norm,
             fastnorm=True,
             out=str(stack_path),
         ):
@@ -305,7 +306,7 @@ def preprocess_with_exposure_groups(
     output_dir: Path,
     get_calibration: callable,
     logger: Optional[JobLogger] = None,
-    fwhm_filter: float = 1.8,
+    fwhm_filter: float = PROCESSING.fwhm_filter,
 ) -> dict[str, Path]:
     """
     Preprocess frames, grouping by filter and exposure.
@@ -364,7 +365,7 @@ def preprocess_all_filters(
     output_dir: Path,
     calibration_paths: dict[str, dict[str, Path]],
     logger: Optional[JobLogger] = None,
-    fwhm_filter: float = 1.8,
+    fwhm_filter: float = PROCESSING.fwhm_filter,
 ) -> dict[str, Path]:
     """
     DEPRECATED: Use preprocess_with_exposure_groups instead.

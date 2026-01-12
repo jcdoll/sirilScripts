@@ -6,17 +6,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from .calibration import CalibrationManager, CalibrationDates
-from .protocols import SirilInterface
-from .composition import compose_and_stretch, CompositionResult
-from .fits_utils import scan_multiple_directories, FrameInfo
+from .calibration import CalibrationDates, CalibrationManager
+from .composition import CompositionResult, compose_and_stretch
+from .fits_utils import FrameInfo, scan_multiple_directories
 from .frame_analysis import (
-    build_requirements_table, build_date_summary_table,
-    format_date_summary_table, get_unique_filters
+    build_date_summary_table,
+    build_requirements_table,
+    format_date_summary_table,
+    get_unique_filters,
 )
-from .job_config import JobConfig, load_job
+from .job_config import load_job
 from .logger import JobLogger, print_completion_summary
 from .preprocessing import preprocess_with_exposure_groups
+from .protocols import SirilInterface
 
 
 @dataclass
@@ -93,7 +95,9 @@ class JobRunner:
             full_dirs = [self.base_path / d for d in dirs]
             frames = scan_multiple_directories(full_dirs)
             all_frames.extend(frames)
-            self.logger.substep(f"{filter_name}: {len(frames)} frames from {len(dirs)} dirs")
+            self.logger.substep(
+                f"{filter_name}: {len(frames)} frames from {len(dirs)} dirs"
+            )
 
         if not all_frames:
             return ValidationResult(
@@ -104,6 +108,34 @@ class JobRunner:
                 buildable_calibration=[],
                 message="No light frames found",
             )
+
+        # Check saturation levels by exposure
+        from collections import defaultdict
+
+        from .fits_utils import check_clipping
+
+        by_exposure: dict[float, list] = defaultdict(list)
+        for frame in all_frames:
+            by_exposure[frame.exposure].append(frame)
+
+        self.logger.step("Clipping check:")
+        for exp in sorted(by_exposure.keys(), reverse=True):
+            frames_at_exp = by_exposure[exp]
+            # Sample frames to check clipping
+            sample = frames_at_exp[: min(5, len(frames_at_exp))]
+            low_pcts = []
+            high_pcts = []
+            for frame in sample:
+                info = check_clipping(frame.path)
+                if info:
+                    low_pcts.append(info.clipped_low_percent)
+                    high_pcts.append(info.clipped_high_percent)
+            if low_pcts and high_pcts:
+                avg_low = sum(low_pcts) / len(low_pcts)
+                avg_high = sum(high_pcts) / len(high_pcts)
+                self.logger.substep(
+                    f"{int(exp)}s: {avg_low:.3f}% black, {avg_high:.3f}% white ({len(frames_at_exp)} frames)"
+                )
 
         # Show date summary table
         date_summary = build_date_summary_table(all_frames)
@@ -137,7 +169,9 @@ class JobRunner:
             buildable.append("bias")
 
         # Check darks for each exposure/temp combo (with override if set)
-        dark_combos = {(req.exposure, self._get_dark_temp(req.temperature)) for req in requirements}
+        dark_combos = {
+            (req.exposure, self._get_dark_temp(req.temperature)) for req in requirements
+        }
         for exp, temp in dark_combos:
             status = self.cal_manager.check_dark(exp, temp)
             if not status.exists and not status.can_build:
@@ -162,7 +196,11 @@ class JobRunner:
             self.logger.substep(f"[MISSING] {name}")
 
         valid = len(missing) == 0
-        message = "Validation passed" if valid else f"Missing {len(missing)} calibration files"
+        message = (
+            "Validation passed"
+            if valid
+            else f"Missing {len(missing)} calibration files"
+        )
 
         return ValidationResult(
             valid=valid,
@@ -186,7 +224,10 @@ class JobRunner:
         self.logger.step("Building calibration masters...")
 
         # Get unique requirements (with temp override if set)
-        dark_combos = {(req.exposure, self._get_dark_temp(req.temperature)) for req in validation.requirements}
+        dark_combos = {
+            (req.exposure, self._get_dark_temp(req.temperature))
+            for req in validation.requirements
+        }
         filters = {req.filter_name for req in validation.requirements}
 
         # Build bias master (single, no temperature dependency)
@@ -199,7 +240,9 @@ class JobRunner:
 
         # Build flat masters
         for filter_name in filters:
-            path = self.cal_manager.build_flat_master(filter_name, self._bias_master, self.siril)
+            path = self.cal_manager.build_flat_master(
+                filter_name, self._bias_master, self.siril
+            )
             self._flat_masters[filter_name] = path
 
     def get_calibration(
@@ -217,8 +260,10 @@ class JobRunner:
         dark_temp = self._get_dark_temp(temp)
         dark = None
         for (cached_exp, cached_temp), path in self._dark_masters.items():
-            if (cached_exp == exposure and
-                    abs(cached_temp - dark_temp) <= self.config.options.temp_tolerance):
+            if (
+                cached_exp == exposure
+                and abs(cached_temp - dark_temp) <= self.config.options.temp_tolerance
+            ):
                 dark = path
                 break
 
@@ -249,7 +294,8 @@ class JobRunner:
         Run composition and stretching.
 
         Discovers stacks from output_dir/stacks/ directory.
-        HDR detection is automatic - returns None if multiple exposures per filter.
+        HDR mode is handled automatically - multiple exposures per filter are
+        blended using brightness-weighted HDR before composition.
         """
         if self.dry_run:
             self.logger.step("[DRY RUN] Would compose and stretch")
@@ -260,6 +306,8 @@ class JobRunner:
             output_dir=self.output_dir,
             job_type=self.config.job_type,
             palette=self.config.options.palette,
+            hdr_low_threshold=self.config.options.hdr_low_threshold,
+            hdr_high_threshold=self.config.options.hdr_high_threshold,
             logger=self.logger,
         )
 

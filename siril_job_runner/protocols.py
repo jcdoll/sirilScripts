@@ -2,7 +2,7 @@
 Protocol definitions for Siril interfaces.
 """
 
-from typing import Protocol, Optional
+from typing import Optional, Protocol
 
 
 class SirilInterface(Protocol):
@@ -14,7 +14,9 @@ class SirilInterface(Protocol):
     # File operations
     def load(self, path: str) -> bool: ...
     def save(self, path: str) -> bool: ...
-    def savetif(self, path: str, astro: bool = False, deflate: bool = False) -> bool: ...
+    def savetif(
+        self, path: str, astro: bool = False, deflate: bool = False
+    ) -> bool: ...
     def savejpg(self, path: str, quality: int = 90) -> bool: ...
     def close(self) -> bool: ...
 
@@ -85,4 +87,10 @@ class SirilInterface(Protocol):
     def starnet(self, stretch: bool = False) -> bool: ...
 
     # Pixel math
-    def pm(self, expression: str) -> bool: ...
+    def pm(
+        self,
+        expression: str,
+        rescale: bool = False,
+        rescale_low: float = 0.0,
+        rescale_high: float = 1.0,
+    ) -> bool: ...

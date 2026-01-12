@@ -231,6 +231,23 @@ class SirilWrapper:
 
     # Pixel math
 
-    def pm(self, expression: str) -> bool:
-        """Pixel math expression."""
-        return self.execute(f"pm {expression}")
+    def pm(
+        self,
+        expression: str,
+        rescale: bool = False,
+        rescale_low: float = 0.0,
+        rescale_high: float = 1.0,
+    ) -> bool:
+        """
+        Pixel math expression.
+
+        Args:
+            expression: PixelMath formula (image vars wrapped in $)
+            rescale: Whether to rescale output
+            rescale_low: Low rescale bound (0-1)
+            rescale_high: High rescale bound (0-1)
+        """
+        cmd = f'pm "{expression}"'
+        if rescale:
+            cmd += f" -rescale {rescale_low} {rescale_high}"
+        return self.execute(cmd)

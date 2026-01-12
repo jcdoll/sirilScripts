@@ -10,9 +10,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from .config import HDR, PROCESSING, STRETCH
+from .hdr import HDRBlender, HDROptions
 from .logger import JobLogger
 from .protocols import SirilInterface
-
 
 # Narrowband palette definitions (channel mappings)
 PALETTES = {
@@ -134,13 +135,9 @@ class Composer:
             if ch not in stacks:
                 raise ValueError(f"Missing required channel: {ch}")
             if len(stacks[ch]) != 1:
-                raise ValueError(f"Expected single exposure for {ch}, got {len(stacks[ch])}")
-
-        # Get the single stack for each channel
-        stack_L = stacks["L"][0]
-        stack_R = stacks["R"][0]
-        stack_G = stacks["G"][0]
-        stack_B = stacks["B"][0]
+                raise ValueError(
+                    f"Expected single exposure for {ch}, got {len(stacks[ch])}"
+                )
 
         self.siril.cd(str(self.stacks_dir))
 
@@ -159,15 +156,21 @@ class Composer:
         self.siril.save("R")
 
         self.siril.load("r_stack_00001")  # B
-        self.siril.linear_match("R", 0, 0.92)
+        self.siril.linear_match(
+            "R", PROCESSING.linear_match_low, PROCESSING.linear_match_high
+        )
         self.siril.save("B")
 
         self.siril.load("r_stack_00002")  # G
-        self.siril.linear_match("R", 0, 0.92)
+        self.siril.linear_match(
+            "R", PROCESSING.linear_match_low, PROCESSING.linear_match_high
+        )
         self.siril.save("G")
 
         self.siril.load("r_stack_00003")  # L
-        self.siril.linear_match("R", 0, 0.92)
+        self.siril.linear_match(
+            "R", PROCESSING.linear_match_low, PROCESSING.linear_match_high
+        )
         self.siril.save("L")
 
         # Step 3: Optional deconvolution on L
@@ -221,7 +224,9 @@ class Composer:
             if ch not in stacks:
                 raise ValueError(f"Missing required channel: {ch}")
             if len(stacks[ch]) != 1:
-                raise ValueError(f"Expected single exposure for {ch}, got {len(stacks[ch])}")
+                raise ValueError(
+                    f"Expected single exposure for {ch}, got {len(stacks[ch])}"
+                )
 
         self.siril.cd(str(self.stacks_dir))
 
@@ -239,11 +244,15 @@ class Composer:
         self.siril.save("R")
 
         self.siril.load("r_stack_00001")  # B
-        self.siril.linear_match("R", 0, 0.92)
+        self.siril.linear_match(
+            "R", PROCESSING.linear_match_low, PROCESSING.linear_match_high
+        )
         self.siril.save("B")
 
         self.siril.load("r_stack_00002")  # G
-        self.siril.linear_match("R", 0, 0.92)
+        self.siril.linear_match(
+            "R", PROCESSING.linear_match_low, PROCESSING.linear_match_high
+        )
         self.siril.save("G")
 
         # Compose RGB
@@ -281,7 +290,9 @@ class Composer:
         self._log_step(f"Composing narrowband ({palette})")
 
         if palette not in PALETTES:
-            raise ValueError(f"Unknown palette: {palette}. Available: {list(PALETTES.keys())}")
+            raise ValueError(
+                f"Unknown palette: {palette}. Available: {list(PALETTES.keys())}"
+            )
 
         mapping = PALETTES[palette]
         required = set(mapping.values())
@@ -290,7 +301,9 @@ class Composer:
             if ch not in stacks:
                 raise ValueError(f"Missing required channel: {ch}")
             if len(stacks[ch]) != 1:
-                raise ValueError(f"Expected single exposure for {ch}, got {len(stacks[ch])}")
+                raise ValueError(
+                    f"Expected single exposure for {ch}, got {len(stacks[ch])}"
+                )
 
         self.siril.cd(str(self.stacks_dir))
 
@@ -305,7 +318,7 @@ class Composer:
         # For SHO: H=00001, O=00002, S=00003
         # Determine numbering based on what channels exist
         channels_sorted = sorted(stacks.keys())
-        channel_to_num = {ch: f"{i+1:05d}" for i, ch in enumerate(channels_sorted)}
+        channel_to_num = {ch: f"{i + 1:05d}" for i, ch in enumerate(channels_sorted)}
 
         # Linear match to H
         self._log("Linear matching to H reference...")
@@ -315,7 +328,9 @@ class Composer:
         for ch in required:
             if ch != "H":
                 self.siril.load(f"r_stack_{channel_to_num[ch]}")
-                self.siril.linear_match("H", 0, 0.92)
+                self.siril.linear_match(
+                    "H", PROCESSING.linear_match_low, PROCESSING.linear_match_high
+                )
                 self.siril.save(ch)
 
         # Map channels according to palette
@@ -356,19 +371,20 @@ class Composer:
 
         self.siril.load(input_name)
         self.siril.autostretch(linked=True)
-        self.siril.mtf(0.20, 0.5, 1.0)
-        self.siril.satu(1, 0)
+        self.siril.mtf(STRETCH.mtf_low, STRETCH.mtf_mid, STRETCH.mtf_high)
+        self.siril.satu(STRETCH.saturation_amount, STRETCH.saturation_threshold)
 
         # Save in multiple formats
+        # Note: Siril auto-adds extensions, so pass path without extension
         self.siril.cd(str(self.output_dir))
 
         fit_path = self.output_dir / f"{output_name}.fit"
         tif_path = self.output_dir / f"{output_name}.tif"
         jpg_path = self.output_dir / f"{output_name}.jpg"
 
-        self.siril.save(str(fit_path))
-        self.siril.savetif(str(tif_path), astro=True, deflate=True)
-        self.siril.savejpg(str(jpg_path), 90)
+        self.siril.save(str(self.output_dir / output_name))
+        self.siril.savetif(str(self.output_dir / output_name), astro=True, deflate=True)
+        self.siril.savejpg(str(self.output_dir / output_name), 90)
 
         self._log(f"Saved: {fit_path.name}, {tif_path.name}, {jpg_path.name}")
 
@@ -381,10 +397,15 @@ def compose_and_stretch(
     job_type: str,
     palette: str = "HOO",
     deconvolve_l: bool = True,
+    hdr_low_threshold: float = HDR.low_threshold,
+    hdr_high_threshold: float = HDR.high_threshold,
     logger: Optional[JobLogger] = None,
-) -> Optional[CompositionResult]:
+) -> CompositionResult:
     """
     Discover stacks and compose based on job type.
+
+    Automatically handles HDR mode by blending multiple exposures per channel
+    before composition.
 
     Args:
         siril: Siril interface
@@ -392,10 +413,12 @@ def compose_and_stretch(
         job_type: "LRGB", "RGB", "SHO", or "HOO"
         palette: Narrowband palette (for SHO/HOO)
         deconvolve_l: Whether to deconvolve L channel (LRGB only)
+        hdr_low_threshold: HDR blend low threshold (0-1, default 0.7)
+        hdr_high_threshold: HDR blend high threshold (0-1, default 0.9)
         logger: Optional logger
 
     Returns:
-        CompositionResult with paths to all outputs, or None if HDR mode
+        CompositionResult with paths to all outputs
     """
     stacks_dir = Path(output_dir) / "stacks"
     stacks = discover_stacks(stacks_dir)
@@ -405,16 +428,35 @@ def compose_and_stretch(
 
     if logger:
         logger.step("Discovered stacks:")
-        for filter_name, stack_list in sorted(stacks.items()):
+        for _filter_name, stack_list in sorted(stacks.items()):
             for s in stack_list:
                 logger.substep(f"{s.name}.fit")
 
-    # Check for HDR mode
+    # Check for HDR mode and blend if needed
     if is_hdr_mode(stacks):
         if logger:
-            logger.step("Multiple exposures detected - HDR mode")
-            logger.substep("Skipping auto-composition. Manual blending required.")
-        return None
+            logger.step("Multiple exposures detected - HDR blending")
+
+        hdr_options = HDROptions(
+            low_threshold=hdr_low_threshold,
+            high_threshold=hdr_high_threshold,
+        )
+        blender = HDRBlender(siril, output_dir, hdr_options, logger)
+
+        # Blend all channels
+        hdr_stacks_dir = stacks_dir / "hdr"
+        hdr_stacks_dir.mkdir(parents=True, exist_ok=True)
+
+        blended_paths = blender.blend_all_channels(stacks, hdr_stacks_dir)
+
+        # Convert back to single-exposure stacks dict for composition
+        # Use exposure=0 to indicate HDR blend (not a real exposure time)
+        stacks = {}
+        for channel, path in blended_paths.items():
+            stacks[channel] = [StackInfo(path=path, filter_name=channel, exposure=0)]
+
+        if logger:
+            logger.step("HDR blending complete")
 
     composer = Composer(siril, output_dir, logger)
 

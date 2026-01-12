@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from .config import HDR, PROCESSING
+
 try:
     import jsonschema
 except ImportError:
@@ -17,11 +19,14 @@ except ImportError:
 class JobOptions:
     """Optional job parameters."""
 
-    fwhm_filter: float = 1.8
-    temp_tolerance: float = 2.0
+    fwhm_filter: float = PROCESSING.fwhm_filter
+    temp_tolerance: float = PROCESSING.temp_tolerance
     denoise: bool = False
     palette: str = "HOO"
-    dark_temp_override: Optional[float] = None  # Force using darks at this temperature
+    dark_temp_override: Optional[float] = None
+    clipping_warning_threshold: float = 0.01
+    hdr_low_threshold: float = HDR.low_threshold
+    hdr_high_threshold: float = HDR.high_threshold
 
 
 @dataclass
@@ -48,15 +53,22 @@ class JobConfig:
             else:
                 lights[filter_name] = list(paths)
 
-        # Parse options
+        # Parse options - only override fields present in data
         options_data = data.get("options", {})
-        options = JobOptions(
-            fwhm_filter=options_data.get("fwhm_filter", 1.8),
-            temp_tolerance=options_data.get("temp_tolerance", 2.0),
-            denoise=options_data.get("denoise", False),
-            palette=options_data.get("palette", "HOO"),
-            dark_temp_override=options_data.get("dark_temp_override"),
-        )
+        options_kwargs = {}
+        for key in [
+            "fwhm_filter",
+            "temp_tolerance",
+            "denoise",
+            "palette",
+            "dark_temp_override",
+            "clipping_warning_threshold",
+            "hdr_low_threshold",
+            "hdr_high_threshold",
+        ]:
+            if key in options_data:
+                options_kwargs[key] = options_data[key]
+        options = JobOptions(**options_kwargs)
 
         return cls(
             name=data["name"],
