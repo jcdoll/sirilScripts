@@ -12,7 +12,7 @@
     },
     "type": {
       "type": "string",
-      "enum": ["LRGB", "SHO", "HOO"],
+      "enum": ["LRGB", "RGB", "SHO", "HOO"],
       "description": "Type of imaging data"
     },
     "calibration": {
@@ -53,7 +53,7 @@
               "type": "string"
             },
             "minItems": 1,
-            "description": "Multiple directory paths (multi-night)"
+            "description": "Multiple directory paths (multi-night or HDR)"
           }
         ]
       }
@@ -65,36 +65,115 @@
     },
     "options": {
       "type": "object",
-      "description": "Optional processing parameters",
+      "description": "Optional processing parameters. Any Config field can be overridden here.",
       "properties": {
         "fwhm_filter": {
           "type": "number",
           "minimum": 0,
-          "default": 1.8,
-          "description": "FWHM filter factor for frame rejection"
+          "description": "FWHM filter factor for frame rejection (default: 1.8)"
         },
         "temp_tolerance": {
           "type": "number",
           "minimum": 0,
-          "default": 2.0,
-          "description": "Temperature tolerance for calibration matching (Celsius)"
+          "description": "Temperature tolerance for calibration matching in Celsius (default: 2.0)"
         },
         "denoise": {
           "type": "boolean",
-          "default": false,
-          "description": "Apply denoising"
+          "description": "Apply denoising (default: false)"
         },
         "palette": {
           "type": "string",
-          "enum": ["HOO", "SHO_blue_gold", "SHO_blue_red", "SHO_natural"],
-          "default": "HOO",
-          "description": "Narrowband palette for SHO/HOO types"
+          "enum": ["HOO", "SHO"],
+          "description": "Narrowband palette for SHO/HOO types (default: HOO)"
         },
         "dark_temp_override": {
           "type": "number",
-          "description": "Force using darks at this temperature (Celsius) regardless of light frame temperatures"
+          "description": "Force using darks at this temperature (Celsius)"
+        },
+        "hdr_low_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "HDR blend low threshold - below this, use 100% long exposure (default: 0.7)"
+        },
+        "hdr_high_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "HDR blend high threshold - above this, use 100% short exposure (default: 0.9)"
+        },
+        "linear_match_low": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Linear match low percentile (default: 0.0)"
+        },
+        "linear_match_high": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Linear match high percentile (default: 0.92)"
+        },
+        "mtf_low": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "MTF stretch low value (default: 0.20)"
+        },
+        "mtf_mid": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "MTF stretch midtone value (default: 0.5)"
+        },
+        "mtf_high": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "MTF stretch high value (default: 1.0)"
+        },
+        "saturation_amount": {
+          "type": "number",
+          "description": "Saturation adjustment amount (default: 1.0)"
+        },
+        "saturation_threshold": {
+          "type": "number",
+          "description": "Saturation threshold (default: 0.0)"
+        },
+        "stack_rejection": {
+          "type": "string",
+          "description": "Stacking rejection method (default: rej)"
+        },
+        "stack_weighting": {
+          "type": "string",
+          "description": "Stacking weighting method (default: w)"
+        },
+        "stack_sigma_low": {
+          "type": "string",
+          "description": "Stacking low sigma value (default: 3)"
+        },
+        "stack_sigma_high": {
+          "type": "string",
+          "description": "Stacking high sigma value (default: 3)"
+        },
+        "stack_norm": {
+          "type": "string",
+          "description": "Stacking normalization method (default: addscale)"
+        },
+        "clipping_low_16bit": {
+          "type": "integer",
+          "description": "16-bit low clipping threshold (default: 100)"
+        },
+        "clipping_high_16bit": {
+          "type": "integer",
+          "description": "16-bit high clipping threshold (default: 65000)"
+        },
+        "clipping_warning_threshold": {
+          "type": "number",
+          "description": "Clipping warning percentage threshold (default: 0.01)"
         }
-      }
+      },
+      "additionalProperties": true
     }
   }
 }

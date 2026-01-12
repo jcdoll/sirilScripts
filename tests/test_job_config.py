@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from siril_job_runner.job_config import JobConfig, JobOptions, load_job, validate_job_file
+from siril_job_runner.config import DEFAULTS
+from siril_job_runner.job_config import JobConfig, load_job, validate_job_file
 
 
 @pytest.fixture
@@ -63,11 +64,11 @@ def test_job_config_normalizes_lights(valid_job_dict):
 
 def test_job_config_options(valid_job_dict):
     """Test options parsing."""
-    config = JobConfig.from_dict(valid_job_dict)
+    job = JobConfig.from_dict(valid_job_dict)
 
-    assert config.options.fwhm_filter == 2.0
-    assert config.options.temp_tolerance == 3
-    assert config.options.denoise is False  # Default
+    assert job.config.fwhm_filter == 2.0
+    assert job.config.temp_tolerance == 3
+    assert job.config.denoise is False  # Default
 
 
 def test_job_config_default_options():
@@ -75,16 +76,20 @@ def test_job_config_default_options():
     minimal = {
         "name": "Test",
         "type": "LRGB",
-        "calibration": {"bias": "2024-01-01", "darks": "2024-01-01", "flats": "2024-01-01"},
+        "calibration": {
+            "bias": "2024-01-01",
+            "darks": "2024-01-01",
+            "flats": "2024-01-01",
+        },
         "lights": {"L": ["L/"]},
         "output": "out",
     }
-    config = JobConfig.from_dict(minimal)
+    job = JobConfig.from_dict(minimal)
 
-    assert config.options.fwhm_filter == 1.8
-    assert config.options.temp_tolerance == 2.0
-    assert config.options.denoise is False
-    assert config.options.palette == "HOO"
+    assert job.config.fwhm_filter == 1.8
+    assert job.config.temp_tolerance == 2.0
+    assert job.config.denoise is False
+    assert job.config.palette == "HOO"
 
 
 def test_load_job_from_file(job_file):
@@ -132,10 +137,78 @@ def test_get_light_directories(valid_job_dict):
     assert dirs == ["M42/L"]
 
 
-def test_job_options_defaults():
-    """Test JobOptions defaults."""
-    opts = JobOptions()
-    assert opts.fwhm_filter == 1.8
-    assert opts.temp_tolerance == 2.0
-    assert opts.denoise is False
-    assert opts.palette == "HOO"
+def test_config_defaults():
+    """Test Config defaults."""
+    assert DEFAULTS.fwhm_filter == 1.8
+    assert DEFAULTS.temp_tolerance == 2.0
+    assert DEFAULTS.denoise is False
+    assert DEFAULTS.palette == "HOO"
+    # HDR defaults
+    assert DEFAULTS.hdr_low_threshold == 0.7
+    assert DEFAULTS.hdr_high_threshold == 0.9
+    # Stretch defaults
+    assert DEFAULTS.mtf_low == 0.20
+    assert DEFAULTS.saturation_amount == 1.0
+
+
+def test_config_override_any_value():
+    """Test that any config value can be overridden via job options."""
+    job_dict = {
+        "name": "Test",
+        "type": "LRGB",
+        "calibration": {
+            "bias": "2024-01-01",
+            "darks": "2024-01-01",
+            "flats": "2024-01-01",
+        },
+        "lights": {"L": ["L/"]},
+        "output": "out",
+        "options": {
+            # Override various config values
+            "hdr_low_threshold": 0.5,
+            "hdr_high_threshold": 0.8,
+            "mtf_low": 0.15,
+            "stack_sigma_low": "2.5",
+            "clipping_high_16bit": 60000,
+        },
+    }
+    job = JobConfig.from_dict(job_dict)
+
+    assert job.config.hdr_low_threshold == 0.5
+    assert job.config.hdr_high_threshold == 0.8
+    assert job.config.mtf_low == 0.15
+    assert job.config.stack_sigma_low == "2.5"
+    assert job.config.clipping_high_16bit == 60000
+    # Unchanged values stay at defaults
+    assert job.config.fwhm_filter == 1.8
+
+
+def test_config_unknown_option_raises():
+    """Test that unknown options raise ValueError."""
+    from siril_job_runner.config import with_overrides
+
+    with pytest.raises(ValueError, match="Unknown config options"):
+        with_overrides({"invalid_option": 123})
+
+
+def test_config_settings_and_job_merge():
+    """Test that settings.json and job options merge correctly."""
+    settings = {"options": {"fwhm_filter": 2.0, "temp_tolerance": 3.0}}
+    job_dict = {
+        "name": "Test",
+        "type": "LRGB",
+        "calibration": {
+            "bias": "2024-01-01",
+            "darks": "2024-01-01",
+            "flats": "2024-01-01",
+        },
+        "lights": {"L": ["L/"]},
+        "output": "out",
+        "options": {"temp_tolerance": 5.0},  # Override settings value
+    }
+    job = JobConfig.from_dict(job_dict, settings)
+
+    # fwhm_filter from settings
+    assert job.config.fwhm_filter == 2.0
+    # temp_tolerance from job (overrides settings)
+    assert job.config.temp_tolerance == 5.0

@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from .config import HDR, PROCESSING, STRETCH
-from .hdr import HDRBlender, HDROptions
+from .config import DEFAULTS, Config
+from .hdr import HDRBlender
 from .logger import JobLogger
 from .protocols import SirilInterface
 
@@ -99,10 +99,12 @@ class Composer:
         self,
         siril: SirilInterface,
         output_dir: Path,
+        config: Config = DEFAULTS,
         logger: Optional[JobLogger] = None,
     ):
         self.siril = siril
         self.output_dir = Path(output_dir)
+        self.config = config
         self.logger = logger
         self.stacks_dir = self.output_dir / "stacks"
 
@@ -155,22 +157,17 @@ class Composer:
         self.siril.load("r_stack_00004")  # R
         self.siril.save("R")
 
+        cfg = self.config
         self.siril.load("r_stack_00001")  # B
-        self.siril.linear_match(
-            "R", PROCESSING.linear_match_low, PROCESSING.linear_match_high
-        )
+        self.siril.linear_match("R", cfg.linear_match_low, cfg.linear_match_high)
         self.siril.save("B")
 
         self.siril.load("r_stack_00002")  # G
-        self.siril.linear_match(
-            "R", PROCESSING.linear_match_low, PROCESSING.linear_match_high
-        )
+        self.siril.linear_match("R", cfg.linear_match_low, cfg.linear_match_high)
         self.siril.save("G")
 
         self.siril.load("r_stack_00003")  # L
-        self.siril.linear_match(
-            "R", PROCESSING.linear_match_low, PROCESSING.linear_match_high
-        )
+        self.siril.linear_match("R", cfg.linear_match_low, cfg.linear_match_high)
         self.siril.save("L")
 
         # Step 3: Optional deconvolution on L
@@ -243,16 +240,13 @@ class Composer:
         self.siril.load("r_stack_00003")  # R
         self.siril.save("R")
 
+        cfg = self.config
         self.siril.load("r_stack_00001")  # B
-        self.siril.linear_match(
-            "R", PROCESSING.linear_match_low, PROCESSING.linear_match_high
-        )
+        self.siril.linear_match("R", cfg.linear_match_low, cfg.linear_match_high)
         self.siril.save("B")
 
         self.siril.load("r_stack_00002")  # G
-        self.siril.linear_match(
-            "R", PROCESSING.linear_match_low, PROCESSING.linear_match_high
-        )
+        self.siril.linear_match("R", cfg.linear_match_low, cfg.linear_match_high)
         self.siril.save("G")
 
         # Compose RGB
@@ -325,11 +319,12 @@ class Composer:
         self.siril.load(f"r_stack_{channel_to_num['H']}")
         self.siril.save("H")
 
+        cfg = self.config
         for ch in required:
             if ch != "H":
                 self.siril.load(f"r_stack_{channel_to_num[ch]}")
                 self.siril.linear_match(
-                    "H", PROCESSING.linear_match_low, PROCESSING.linear_match_high
+                    "H", cfg.linear_match_low, cfg.linear_match_high
                 )
                 self.siril.save(ch)
 
@@ -369,10 +364,11 @@ class Composer:
         """
         self._log("Auto-stretching...")
 
+        cfg = self.config
         self.siril.load(input_name)
         self.siril.autostretch(linked=True)
-        self.siril.mtf(STRETCH.mtf_low, STRETCH.mtf_mid, STRETCH.mtf_high)
-        self.siril.satu(STRETCH.saturation_amount, STRETCH.saturation_threshold)
+        self.siril.mtf(cfg.mtf_low, cfg.mtf_mid, cfg.mtf_high)
+        self.siril.satu(cfg.saturation_amount, cfg.saturation_threshold)
 
         # Save in multiple formats
         # Note: Siril auto-adds extensions, so pass path without extension
@@ -397,8 +393,7 @@ def compose_and_stretch(
     job_type: str,
     palette: str = "HOO",
     deconvolve_l: bool = True,
-    hdr_low_threshold: float = HDR.low_threshold,
-    hdr_high_threshold: float = HDR.high_threshold,
+    config: Config = DEFAULTS,
     logger: Optional[JobLogger] = None,
 ) -> CompositionResult:
     """
@@ -413,8 +408,7 @@ def compose_and_stretch(
         job_type: "LRGB", "RGB", "SHO", or "HOO"
         palette: Narrowband palette (for SHO/HOO)
         deconvolve_l: Whether to deconvolve L channel (LRGB only)
-        hdr_low_threshold: HDR blend low threshold (0-1, default 0.7)
-        hdr_high_threshold: HDR blend high threshold (0-1, default 0.9)
+        config: Configuration with processing parameters
         logger: Optional logger
 
     Returns:
@@ -437,11 +431,7 @@ def compose_and_stretch(
         if logger:
             logger.step("Multiple exposures detected - HDR blending")
 
-        hdr_options = HDROptions(
-            low_threshold=hdr_low_threshold,
-            high_threshold=hdr_high_threshold,
-        )
-        blender = HDRBlender(siril, output_dir, hdr_options, logger)
+        blender = HDRBlender(siril, output_dir, config, logger)
 
         # Blend all channels
         hdr_stacks_dir = stacks_dir / "hdr"
@@ -458,7 +448,7 @@ def compose_and_stretch(
         if logger:
             logger.step("HDR blending complete")
 
-    composer = Composer(siril, output_dir, logger)
+    composer = Composer(siril, output_dir, config, logger)
 
     if job_type == "LRGB":
         return composer.compose_lrgb(stacks, deconvolve_l=deconvolve_l)

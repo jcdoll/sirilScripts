@@ -1,126 +1,135 @@
 """
-Centralized configuration defaults for Siril job processing.
+Centralized configuration for Siril job processing.
 
-All magic values and defaults should be defined here.
+All configurable values are defined here in a single Config dataclass.
+Users can override ANY value via job JSON files or settings.json.
+
+Override precedence: DEFAULTS <- settings.json <- job.json options
 """
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, fields, replace
+from typing import Optional
 
 
-@dataclass(frozen=True)
-class ClippingThresholds:
-    """Thresholds for detecting clipped pixels."""
+@dataclass
+class Config:
+    """
+    All configuration values. User can override any field.
 
-    # 16-bit thresholds
-    low_16bit: int = 100
-    high_16bit: int = 65000
+    To add a new option: add a field here with a default value.
+    It will automatically be available for override in job files.
+    """
 
-    # 8-bit thresholds
-    low_8bit: int = 5
-    high_8bit: int = 250
+    # Clipping detection thresholds
+    clipping_low_16bit: int = 100
+    clipping_high_16bit: int = 65000
+    clipping_low_8bit: int = 5
+    clipping_high_8bit: int = 250
+    clipping_low_float: float = 0.01
+    clipping_high_float: float = 0.99
+    clipping_warning_threshold: float = 0.01
+    float_normalized_threshold: float = 1.5  # Threshold to detect normalized float data
 
-    # Normalized float thresholds
-    low_float: float = 0.01
-    high_float: float = 0.99
+    # Fallback values
+    default_temperature: float = 0.0  # Used when temperature not in FITS header
 
-
-@dataclass(frozen=True)
-class StretchDefaults:
-    """Default parameters for auto-stretch pipeline."""
-
+    # Auto-stretch pipeline
     mtf_low: float = 0.20
     mtf_mid: float = 0.5
     mtf_high: float = 1.0
     saturation_amount: float = 1.0
     saturation_threshold: float = 0.0
 
-
-@dataclass(frozen=True)
-class ProcessingDefaults:
-    """Default parameters for preprocessing."""
-
+    # Processing parameters
     fwhm_filter: float = 1.8
     temp_tolerance: float = 2.0
     linear_match_low: float = 0.0
     linear_match_high: float = 0.92
 
+    # Light frame stacking
+    stack_rejection: str = "rej"
+    stack_weighting: str = "w"
+    stack_sigma_low: str = "3"
+    stack_sigma_high: str = "3"
+    stack_norm: str = "addscale"
 
-@dataclass(frozen=True)
-class StackingDefaults:
-    """Default parameters for stacking."""
+    # HDR blending (brightness-weighted via PixelMath)
+    hdr_low_threshold: float = 0.7
+    hdr_high_threshold: float = 0.9
 
-    rejection: str = "rej"
-    weighting: str = "w"
-    sigma_low: str = "3"
-    sigma_high: str = "3"
-    norm: str = "addscale"
-
-
-@dataclass(frozen=True)
-class HDRDefaults:
-    """HDR blending parameters.
-
-    Algorithm uses brightness-weighted blending via Siril's PixelMath:
-    - Pixels below low_threshold: use long exposure (better S/N in shadows)
-    - Pixels above high_threshold: use short exposure (avoids clipping)
-    - Between thresholds: smooth linear blend
-
-    For 3+ exposures, blend iteratively from longest to shortest.
-    """
-
-    low_threshold: float = 0.7  # Start blending above this (normalized 0-1)
-    high_threshold: float = 0.9  # Fully use short exposure above this
-
-
-@dataclass(frozen=True)
-class JobDefaults:
-    """Default job-level options."""
-
-    denoise: bool = False
-    palette: str = "HOO"
-    clipping_warning_threshold: float = 0.01
-
-
-@dataclass(frozen=True)
-class CalibrationDefaults:
-    """Calibration directory and file naming conventions."""
-
-    # Directory names
-    base_dir: str = "calibration"
-    masters_dir: str = "masters"
-    raw_dir: str = "raw"
-
-    # Subdirectory names
+    # Calibration directory structure
+    calibration_base_dir: str = "calibration"
+    calibration_masters_dir: str = "masters"
+    calibration_raw_dir: str = "raw"
     bias_subdir: str = "biases"
     dark_subdir: str = "darks"
     flat_subdir: str = "flats"
 
-    # File prefixes
+    # Calibration file naming
     bias_prefix: str = "bias_"
     dark_prefix: str = "dark_"
     flat_prefix: str = "flat_"
-
-    # Extensions and suffixes
     fit_extension: str = ".fit"
     fit_glob: str = "*.fit*"
     temp_suffix: str = "C"
     exposure_suffix: str = "s"
 
-    # Siril conventions
+    # Siril processing conventions
     process_dir: str = "./process"
     calibrated_prefix: str = "pp_"
 
-    # Stacking for calibration frames
-    rejection: str = "rej"
-    sigma: str = "3"
-    flat_norm: str = "-norm=mul"
-    no_norm: str = "-nonorm"
+    # Calibration frame stacking
+    cal_rejection: str = "rej"
+    cal_sigma: str = "3"
+    cal_flat_norm: str = "-norm=mul"
+    cal_no_norm: str = "-nonorm"
+
+    # Job options
+    denoise: bool = False
+    palette: str = "HOO"
+    dark_temp_override: Optional[float] = None
 
 
-# Module-level instances for import
-CLIPPING = ClippingThresholds()
-STRETCH = StretchDefaults()
-PROCESSING = ProcessingDefaults()
-STACKING = StackingDefaults()
-HDR = HDRDefaults()
-CALIBRATION = CalibrationDefaults()
+# Default configuration instance
+DEFAULTS = Config()
+
+
+def get_valid_options() -> set[str]:
+    """Get all valid option names."""
+    return {f.name for f in fields(Config)}
+
+
+def with_overrides(overrides: dict) -> Config:
+    """
+    Create a Config with overrides applied.
+
+    Validates that all override keys are valid option names.
+    Raises ValueError for unknown options.
+    """
+    if not overrides:
+        return DEFAULTS
+
+    valid = get_valid_options()
+    invalid = set(overrides.keys()) - valid
+    if invalid:
+        raise ValueError(f"Unknown config options: {sorted(invalid)}")
+
+    return replace(DEFAULTS, **overrides)
+
+
+def merge_overrides(*override_dicts: dict) -> dict:
+    """
+    Merge multiple override dicts (later dicts take precedence).
+
+    Useful for: DEFAULTS <- settings.json <- job.json
+    """
+    result = {}
+    for d in override_dicts:
+        if d:
+            result.update(d)
+    return result
+
+
+def config_to_dict(config: Config) -> dict:
+    """Convert Config to dict (for serialization)."""
+    return asdict(config)

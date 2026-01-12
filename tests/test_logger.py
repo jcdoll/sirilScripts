@@ -107,10 +107,7 @@ def test_create_logger_convenience():
 def test_table_output(capsys):
     """Test table formatting."""
     logger = JobLogger()
-    logger.table(
-        ["Filter", "Count"],
-        [["L", "45"], ["R", "20"]]
-    )
+    logger.table(["Filter", "Count"], [["L", "45"], ["R", "20"]])
     captured = capsys.readouterr()
     assert "Filter" in captured.out
     assert "Count" in captured.out

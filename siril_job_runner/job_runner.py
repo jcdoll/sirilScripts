@@ -66,7 +66,7 @@ class JobRunner:
                 darks=self.config.calibration_darks,
                 flats=self.config.calibration_flats,
             ),
-            temp_tolerance=self.config.options.temp_tolerance,
+            config=self.config.config,
             logger=self.logger,
         )
 
@@ -77,8 +77,8 @@ class JobRunner:
 
     def _get_dark_temp(self, actual_temp: float) -> float:
         """Get temperature to use for dark matching (override if set)."""
-        if self.config.options.dark_temp_override is not None:
-            return self.config.options.dark_temp_override
+        if self.config.config.dark_temp_override is not None:
+            return self.config.config.dark_temp_override
         return actual_temp
 
     def validate(self) -> ValidationResult:
@@ -126,7 +126,7 @@ class JobRunner:
             low_pcts = []
             high_pcts = []
             for frame in sample:
-                info = check_clipping(frame.path)
+                info = check_clipping(frame.path, self.config.config)
                 if info:
                     low_pcts.append(info.clipped_low_percent)
                     high_pcts.append(info.clipped_high_percent)
@@ -262,7 +262,7 @@ class JobRunner:
         for (cached_exp, cached_temp), path in self._dark_masters.items():
             if (
                 cached_exp == exposure
-                and abs(cached_temp - dark_temp) <= self.config.options.temp_tolerance
+                and abs(cached_temp - dark_temp) <= self.config.config.temp_tolerance
             ):
                 dark = path
                 break
@@ -285,8 +285,8 @@ class JobRunner:
             frames=frames,
             output_dir=self.output_dir,
             get_calibration=self.get_calibration,
+            config=self.config.config,
             logger=self.logger,
-            fwhm_filter=self.config.options.fwhm_filter,
         )
 
     def run_composition(self) -> CompositionResult:
@@ -305,9 +305,8 @@ class JobRunner:
             siril=self.siril,
             output_dir=self.output_dir,
             job_type=self.config.job_type,
-            palette=self.config.options.palette,
-            hdr_low_threshold=self.config.options.hdr_low_threshold,
-            hdr_high_threshold=self.config.options.hdr_high_threshold,
+            palette=self.config.config.palette,
+            config=self.config.config,
             logger=self.logger,
         )
 

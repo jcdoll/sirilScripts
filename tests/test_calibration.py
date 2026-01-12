@@ -2,11 +2,14 @@
 
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
-from siril_job_runner.calibration import CalibrationManager, CalibrationDates, CalibrationStatus
+from siril_job_runner.calibration import (
+    CalibrationDates,
+    CalibrationManager,
+    CalibrationStatus,
+)
 
 
 @pytest.fixture

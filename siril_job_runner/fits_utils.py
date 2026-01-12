@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from .config import CLIPPING
+from .config import DEFAULTS, Config
 
 try:
     from astropy.io import fits
@@ -77,9 +77,8 @@ def read_fits_header(path: Path) -> Optional[FrameInfo]:
             if exposure is None:
                 return None
 
-            # Default temperature if not found (some cameras don't report)
             if temperature is None:
-                temperature = 0.0
+                temperature = DEFAULTS.default_temperature
 
             return FrameInfo(
                 path=path,
@@ -158,9 +157,13 @@ class ClippingInfo:
         return 100.0 * self.clipped_high / self.total_pixels
 
 
-def check_clipping(path: Path) -> Optional[ClippingInfo]:
+def check_clipping(path: Path, config: Config = DEFAULTS) -> Optional[ClippingInfo]:
     """
     Check a FITS file for clipped pixels (both black and white).
+
+    Args:
+        path: Path to FITS file
+        config: Configuration with clipping thresholds
 
     Returns:
         ClippingInfo with clipping statistics, or None if file cannot be read
@@ -183,25 +186,25 @@ def check_clipping(path: Path) -> Optional[ClippingInfo]:
             # Determine thresholds based on dtype
             if data.dtype == np.uint16:
                 bit_depth = 16
-                low_threshold = CLIPPING.low_16bit
-                high_threshold = CLIPPING.high_16bit
+                low_threshold = config.clipping_low_16bit
+                high_threshold = config.clipping_high_16bit
             elif data.dtype == np.uint8:
                 bit_depth = 8
-                low_threshold = CLIPPING.low_8bit
-                high_threshold = CLIPPING.high_8bit
+                low_threshold = config.clipping_low_8bit
+                high_threshold = config.clipping_high_8bit
             elif data.dtype in (np.float32, np.float64):
                 bit_depth = 16
                 max_val = float(data.max())
-                if max_val <= 1.5:  # Normalized data
-                    low_threshold = CLIPPING.low_float
-                    high_threshold = CLIPPING.high_float
+                if max_val <= config.float_normalized_threshold:  # Normalized data
+                    low_threshold = config.clipping_low_float
+                    high_threshold = config.clipping_high_float
                 else:
-                    low_threshold = CLIPPING.low_16bit
-                    high_threshold = CLIPPING.high_16bit
+                    low_threshold = config.clipping_low_16bit
+                    high_threshold = config.clipping_high_16bit
             else:
                 bit_depth = 16
-                low_threshold = CLIPPING.low_16bit
-                high_threshold = CLIPPING.high_16bit
+                low_threshold = config.clipping_low_16bit
+                high_threshold = config.clipping_high_16bit
 
             total_pixels = data.size
             clipped_low = int((data <= low_threshold).sum())

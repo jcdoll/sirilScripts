@@ -42,22 +42,13 @@ References
 - HDR discussion: https://discuss.pixls.us/t/hdr-processing-in-siril/20492
 """
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from .composition import StackInfo
-from .config import HDR, PROCESSING
+from .config import DEFAULTS, Config
 from .logger import JobLogger
 from .protocols import SirilInterface
-
-
-@dataclass
-class HDROptions:
-    """Options for HDR blending."""
-
-    low_threshold: float = HDR.low_threshold
-    high_threshold: float = HDR.high_threshold
 
 
 def build_blend_formula(
@@ -81,26 +72,14 @@ def build_blend_formula(
     Returns:
         PixelMath expression string
     """
-    # Siril PixelMath uses iif(condition, true_val, false_val)
-    # We need to compute: w = clamp((long - low) / (high - low), 0, 1)
-    # Then: result = long * (1 - w) + short * w
-
-    # The range for the linear ramp
     ramp_range = high_threshold - low_threshold
 
-    # Build the weight calculation using nested iif:
-    # w = 0 if long < low_threshold
-    # w = 1 if long > high_threshold
-    # w = (long - low) / range otherwise
     weight_expr = (
         f"iif(${long_var}$ < {low_threshold}, 0, "
         f"iif(${long_var}$ > {high_threshold}, 1, "
         f"(${long_var}$ - {low_threshold}) / {ramp_range}))"
     )
 
-    # result = long * (1 - w) + short * w
-    # Rewritten to avoid computing weight twice:
-    # We compute weight inline in both terms
     formula = f"${long_var}$ * (1 - {weight_expr}) + ${short_var}$ * {weight_expr}"
 
     return formula
@@ -122,12 +101,12 @@ class HDRBlender:
         self,
         siril: SirilInterface,
         work_dir: Path,
-        options: Optional[HDROptions] = None,
+        config: Config = DEFAULTS,
         logger: Optional[JobLogger] = None,
     ):
         self.siril = siril
         self.work_dir = Path(work_dir)
-        self.options = options or HDROptions()
+        self.config = config
         self.logger = logger
 
     def _log(self, message: str) -> None:
@@ -156,44 +135,31 @@ class HDRBlender:
             Path to the blended HDR stack
         """
         if len(stacks) < 2:
-            # Nothing to blend, just return the single stack
             if stacks:
                 return stacks[0].path
             raise ValueError(f"No stacks provided for channel {channel}")
 
         self._log_step(f"HDR blending {channel} ({len(stacks)} exposures)")
 
-        # Sort by exposure (longest first for blending order)
         sorted_stacks = sorted(stacks, key=lambda s: s.exposure, reverse=True)
 
-        # Create HDR working directory
         hdr_dir = self.work_dir / "hdr" / channel
         hdr_dir.mkdir(parents=True, exist_ok=True)
         self.siril.cd(str(hdr_dir))
 
-        # Step 1: Load and save all stacks with consistent names
-        # Longest exposure is our reference
         ref_stack = sorted_stacks[0]
         self._log(f"Reference: {ref_stack.name} ({ref_stack.exposure}s)")
 
         self.siril.load(str(ref_stack.path))
         self.siril.save("ref")
 
-        # Load other exposures and linear match to reference
+        cfg = self.config
         for i, stack in enumerate(sorted_stacks[1:], 1):
             self._log(f"Loading {stack.name} ({stack.exposure}s)")
             self.siril.load(str(stack.path))
-
-            # Register to reference
-            # Note: stacks should already be registered from preprocessing
-            # but we linear match to ensure consistent background levels
-            self.siril.linear_match(
-                "ref", PROCESSING.linear_match_low, PROCESSING.linear_match_high
-            )
+            self.siril.linear_match("ref", cfg.linear_match_low, cfg.linear_match_high)
             self.siril.save(f"exp{i}")
 
-        # Step 2: Iterative blending from longest to shortest
-        # Start with ref (longest), blend with next shortest, etc.
         current = "ref"
 
         for i, _stack in enumerate(sorted_stacks[1:], 1):
@@ -202,27 +168,24 @@ class HDRBlender:
 
             self._log(
                 f"Blending {current} with {short_name} "
-                f"(thresholds: {self.options.low_threshold}-{self.options.high_threshold})"
+                f"(thresholds: {cfg.hdr_low_threshold}-{cfg.hdr_high_threshold})"
             )
 
-            # Build and execute blend formula
             formula = build_blend_formula(
                 long_var=current,
                 short_var=short_name,
-                low_threshold=self.options.low_threshold,
-                high_threshold=self.options.high_threshold,
+                low_threshold=cfg.hdr_low_threshold,
+                high_threshold=cfg.hdr_high_threshold,
             )
 
             self.siril.pm(formula, rescale=True)
             self.siril.save(blend_name)
             current = blend_name
 
-        # Step 3: Save final result
         self.siril.load(current)
         self.siril.save(str(output_path))
 
         if not output_path.exists():
-            # Siril may have added .fit extension
             if output_path.with_suffix(".fit").exists():
                 return output_path.with_suffix(".fit")
             raise FileNotFoundError(f"HDR blend output not created: {output_path}")
@@ -253,13 +216,10 @@ class HDRBlender:
 
         for channel, stacks in stacks_by_channel.items():
             if len(stacks) > 1:
-                # Multiple exposures - blend
                 output_path = output_dir / f"stack_{channel}_HDR.fit"
                 results[channel] = self.blend_channel(channel, stacks, output_path)
             elif len(stacks) == 1:
-                # Single exposure - use as-is
                 results[channel] = stacks[0].path
-            # Skip channels with no stacks
 
         return results
 
@@ -269,7 +229,7 @@ def blend_hdr_stacks(
     stacks: dict[str, list[StackInfo]],
     work_dir: Path,
     output_dir: Path,
-    options: Optional[HDROptions] = None,
+    config: Config = DEFAULTS,
     logger: Optional[JobLogger] = None,
 ) -> dict[str, Path]:
     """
@@ -280,11 +240,11 @@ def blend_hdr_stacks(
         stacks: Dict from discover_stacks() - channel name to list of StackInfo
         work_dir: Working directory for intermediate files
         output_dir: Output directory for final HDR stacks
-        options: HDR options (thresholds)
+        config: Configuration with HDR thresholds
         logger: Optional logger
 
     Returns:
         Dict mapping channel name to HDR-blended (or single) stack path
     """
-    blender = HDRBlender(siril, work_dir, options, logger)
+    blender = HDRBlender(siril, work_dir, config, logger)
     return blender.blend_all_channels(stacks, output_dir)

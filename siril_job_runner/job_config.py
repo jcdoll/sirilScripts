@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from .config import HDR, PROCESSING
+from .config import Config, merge_overrides, with_overrides
 
 try:
     import jsonschema
@@ -16,35 +16,27 @@ except ImportError:
 
 
 @dataclass
-class JobOptions:
-    """Optional job parameters."""
-
-    fwhm_filter: float = PROCESSING.fwhm_filter
-    temp_tolerance: float = PROCESSING.temp_tolerance
-    denoise: bool = False
-    palette: str = "HOO"
-    dark_temp_override: Optional[float] = None
-    clipping_warning_threshold: float = 0.01
-    hdr_low_threshold: float = HDR.low_threshold
-    hdr_high_threshold: float = HDR.high_threshold
-
-
-@dataclass
 class JobConfig:
     """Parsed job configuration."""
 
     name: str
-    job_type: str  # "type" is reserved
+    job_type: str  # "type" is reserved in Python
     calibration_bias: str
     calibration_darks: str
     calibration_flats: str
     lights: dict[str, list[str]]  # filter -> list of directories
     output: str
-    options: JobOptions = field(default_factory=JobOptions)
+    config: Config = field(default_factory=lambda: Config())
 
     @classmethod
-    def from_dict(cls, data: dict) -> "JobConfig":
-        """Create JobConfig from dictionary."""
+    def from_dict(cls, data: dict, settings: Optional[dict] = None) -> "JobConfig":
+        """
+        Create JobConfig from dictionary.
+
+        Args:
+            data: Job definition dict (from JSON)
+            settings: Optional user settings (from settings.json)
+        """
         # Normalize lights to always be lists
         lights = {}
         for filter_name, paths in data["lights"].items():
@@ -53,22 +45,11 @@ class JobConfig:
             else:
                 lights[filter_name] = list(paths)
 
-        # Parse options - only override fields present in data
-        options_data = data.get("options", {})
-        options_kwargs = {}
-        for key in [
-            "fwhm_filter",
-            "temp_tolerance",
-            "denoise",
-            "palette",
-            "dark_temp_override",
-            "clipping_warning_threshold",
-            "hdr_low_threshold",
-            "hdr_high_threshold",
-        ]:
-            if key in options_data:
-                options_kwargs[key] = options_data[key]
-        options = JobOptions(**options_kwargs)
+        # Merge settings and job options, then create Config
+        settings_options = settings.get("options", {}) if settings else {}
+        job_options = data.get("options", {})
+        merged = merge_overrides(settings_options, job_options)
+        config = with_overrides(merged)
 
         return cls(
             name=data["name"],
@@ -78,11 +59,11 @@ class JobConfig:
             calibration_flats=data["calibration"]["flats"],
             lights=lights,
             output=data["output"],
-            options=options,
+            config=config,
         )
 
     @classmethod
-    def from_file(cls, path: Path) -> "JobConfig":
+    def from_file(cls, path: Path, settings: Optional[dict] = None) -> "JobConfig":
         """Load and validate job configuration from file."""
         path = Path(path)
         if not path.exists():
@@ -99,7 +80,7 @@ class JobConfig:
                     schema = json.load(f)
                 jsonschema.validate(data, schema)
 
-        return cls.from_dict(data)
+        return cls.from_dict(data, settings)
 
     def get_filters(self) -> list[str]:
         """Get list of filter names."""
@@ -110,9 +91,9 @@ class JobConfig:
         return self.lights.get(filter_name, [])
 
 
-def load_job(path: Path) -> JobConfig:
+def load_job(path: Path, settings: Optional[dict] = None) -> JobConfig:
     """Load a job configuration file."""
-    return JobConfig.from_file(path)
+    return JobConfig.from_file(path, settings)
 
 
 def load_settings(repo_root: Path) -> dict:
@@ -145,5 +126,7 @@ def validate_job_file(path: Path) -> tuple[bool, Optional[str]]:
         return False, f"Schema validation failed: {e.message}"
     except KeyError as e:
         return False, f"Missing required field: {e}"
+    except ValueError as e:
+        return False, str(e)  # Unknown config option
     except Exception as e:
         return False, f"Unexpected error: {e}"

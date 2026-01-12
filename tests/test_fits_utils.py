@@ -1,22 +1,19 @@
 """Tests for fits_utils module."""
 
-import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
 
 from siril_job_runner.fits_utils import (
     FrameInfo,
-    temperatures_match,
     _get_header_value,
+    temperatures_match,
 )
 from siril_job_runner.frame_analysis import (
     RequirementsEntry,
     build_requirements_table,
     get_unique_exposures,
-    get_unique_temperatures,
     get_unique_filters,
+    get_unique_temperatures,
 )
-
 
 # Test FrameInfo
 
