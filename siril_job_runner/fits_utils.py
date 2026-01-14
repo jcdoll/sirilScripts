@@ -2,6 +2,7 @@
 FITS header reading utilities for Siril job processing.
 """
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -109,6 +110,91 @@ def scan_multiple_directories(
 def temperatures_match(temp1: float, temp2: float, tolerance: float = 2.0) -> bool:
     """Check if two temperatures match within tolerance."""
     return abs(temp1 - temp2) <= tolerance
+
+
+@dataclass
+class ColorBalance:
+    """Color balance statistics for an RGB image."""
+
+    r_median: float
+    g_median: float
+    b_median: float
+    dominant_channel: str
+    dominance_ratio: float  # Ratio of dominant to weakest channel
+    is_imbalanced: bool  # True if one channel strongly dominates
+
+
+def check_color_balance(
+    path: Path, imbalance_threshold: float = 3.0
+) -> Optional[ColorBalance]:
+    """
+    Check color balance of an RGB FITS file.
+
+    Computes median values for each channel and detects imbalance.
+
+    Args:
+        path: Path to RGB FITS file
+        imbalance_threshold: Ratio above which image is considered imbalanced
+
+    Returns:
+        ColorBalance with statistics, or None if file cannot be read
+    """
+    if fits is None:
+        raise ImportError("astropy is required for FITS reading")
+
+    path = Path(path)
+    if not path.exists():
+        return None
+
+    try:
+        import numpy as np
+
+        with fits.open(path) as hdul:
+            data = hdul[0].data
+            if data is None or len(data.shape) != 3 or data.shape[0] != 3:
+                return None
+
+            # Compute median of non-zero pixels for each channel
+            medians = []
+            for i in range(3):
+                ch = data[i]
+                nonzero = ch[ch > 0]
+                if len(nonzero) > 0:
+                    medians.append(float(np.median(nonzero)))
+                else:
+                    medians.append(0.0)
+
+            r_med, g_med, b_med = medians
+            channel_names = ["R", "G", "B"]
+
+            # Find dominant and weakest
+            max_idx = np.argmax(medians)
+            nonzero_medians = [m for m in medians if m > 0]
+            if not nonzero_medians:
+                return ColorBalance(
+                    r_median=r_med,
+                    g_median=g_med,
+                    b_median=b_med,
+                    dominant_channel="none",
+                    dominance_ratio=0.0,
+                    is_imbalanced=True,
+                )
+
+            min_nonzero = min(nonzero_medians)
+            max_val = medians[max_idx]
+            ratio = max_val / min_nonzero if min_nonzero > 0 else float("inf")
+
+            return ColorBalance(
+                r_median=r_med,
+                g_median=g_med,
+                b_median=b_med,
+                dominant_channel=channel_names[max_idx],
+                dominance_ratio=ratio,
+                is_imbalanced=ratio > imbalance_threshold,
+            )
+
+    except Exception:
+        return None
 
 
 def check_clipping(path: Path, config: Config = DEFAULTS) -> Optional[ClippingInfo]:

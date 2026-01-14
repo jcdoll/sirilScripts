@@ -1,3 +1,9 @@
 {
-  "base_path": "/path/to/your/astro/data"
+  "base_path": "/path/to/your/astro/data",
+
+  "spcc_enabled": true,
+  "spcc_sensor": "Sony_IMX571",
+  "spcc_red_filter": "Optolong_Red",
+  "spcc_green_filter": "Optolong_Green",
+  "spcc_blue_filter": "Optolong_Blue"
 }

@@ -14,6 +14,11 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# Fix Windows console encoding for pysiril output (contains Greek letters like σ)
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 
 class TeeWriter:
     """Write to both stdout and a file."""
@@ -217,6 +222,8 @@ Examples:
                 print()
                 print("Outputs:")
                 print(f"  Linear: {result.linear_path}")
+                if result.linear_pcc_path:
+                    print(f"  Linear (PCC): {result.linear_pcc_path}")
                 print(f"  Auto FIT: {result.auto_fit}")
                 print(f"  Auto TIF: {result.auto_tif}")
                 print(f"  Auto JPG: {result.auto_jpg}")

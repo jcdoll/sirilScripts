@@ -140,6 +140,7 @@ def print_completion_summary(
     auto_tif: Path,
     auto_jpg: Path,
     stacks_dir: Path,
+    linear_pcc_path: Optional[Path] = None,
 ) -> None:
     """
     Print formatted completion summary with user instructions.
@@ -165,23 +166,46 @@ def print_completion_summary(
         f" {auto_tif}",
         f" {auto_jpg}",
         "",
-        " FOR MANUAL VERALUX PROCESSING",
-        " " + "-" * 29,
-        " Linear composed file (unstretched):",
-        f"   {linear_path}",
-        "",
-        " Steps:",
-        "   1. Open Siril GUI",
-        f"   2. File -> Open -> {linear_path.name}",
-        "   3. Scripts -> VeraLux HyperMetric Stretch",
-        "   4. Adjust parameters (or use Ready-to-Use mode)",
-        "   5. Apply stretch",
-        "   6. Image -> Saturation (adjust to taste)",
-        "   7. File -> Save As -> your_final_image.fit",
-        "",
-        " LINEAR STACKS (for advanced re-processing)",
-        " " + "-" * 42,
+        " FOR MANUAL PROCESSING",
+        " " + "-" * 21,
     ]
+
+    if linear_pcc_path:
+        lines.extend(
+            [
+                " Color-calibrated linear (recommended):",
+                f"   {linear_pcc_path}",
+                "",
+                " Uncalibrated linear (if PCC colors look wrong):",
+                f"   {linear_path}",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                " Linear composed file (unstretched):",
+                f"   {linear_path}",
+                " (Color calibration was not applied)",
+            ]
+        )
+
+    recommended_file = linear_pcc_path.name if linear_pcc_path else linear_path.name
+    lines.extend(
+        [
+            "",
+            " Steps:",
+            "   1. Open Siril GUI",
+            f"   2. File -> Open -> {recommended_file}",
+            "   3. Scripts -> VeraLux HyperMetric Stretch",
+            "   4. Adjust parameters (or use Ready-to-Use mode)",
+            "   5. Apply stretch",
+            "   6. Image -> Saturation (adjust to taste)",
+            "   7. File -> Save As -> your_final_image.fit",
+            "",
+            " LINEAR STACKS (for advanced re-processing)",
+            " " + "-" * 42,
+        ]
+    )
 
     for stack_file in stack_files:
         lines.append(f" {stack_file}")

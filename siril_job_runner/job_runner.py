@@ -330,6 +330,7 @@ class JobRunner:
                 auto_tif=result.auto_tif,
                 auto_jpg=result.auto_jpg,
                 stacks_dir=result.stacks_dir,
+                linear_pcc_path=result.linear_pcc_path,
             )
 
         return result

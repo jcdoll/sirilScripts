@@ -237,6 +237,74 @@ class SirilWrapper:
         """Remove green cast."""
         return self.execute("rmgreen")
 
+    # Header manipulation
+
+    def update_key(self, key: str, value: str, comment: str = "") -> bool:
+        """
+        Update a FITS header keyword value.
+
+        Args:
+            key: FITS keyword name (e.g., 'EQUINOX')
+            value: New value for the keyword
+            comment: Optional comment for the keyword
+        """
+        if comment:
+            return self.execute(f"update_key {key} {value} {comment}")
+        return self.execute(f"update_key {key} {value}")
+
+    # Astrometry and color calibration
+
+    def platesolve(self) -> bool:
+        """
+        Plate solve the loaded image.
+
+        Uses FITS header metadata (focal length, pixel size, coordinates)
+        if available. Returns True if solve succeeds.
+        """
+        return self.execute("platesolve")
+
+    def pcc(self, catalog: str = "nomad") -> bool:
+        """
+        Photometric Color Calibration on loaded image.
+
+        Requires image to be plate-solved first.
+
+        Args:
+            catalog: Star catalog to use (nomad, apass, gaia, localgaia)
+        """
+        return self.execute(f"pcc -catalog={catalog}")
+
+    def spcc(
+        self,
+        sensor: str,
+        red_filter: str,
+        green_filter: str,
+        blue_filter: str,
+    ) -> bool:
+        """
+        Spectrophotometric Color Calibration on loaded image.
+
+        Uses actual sensor QE and filter transmission curves for accurate
+        color calibration. Preferable to PCC when filter profiles are known.
+
+        Args:
+            sensor: Mono sensor name (e.g., "Sony_IMX571")
+            red_filter: Red filter name (e.g., "Optolong_Red")
+            green_filter: Green filter name (e.g., "Optolong_Green")
+            blue_filter: Blue filter name (e.g., "Optolong_Blue")
+
+        Note: Use underscores instead of spaces in names to avoid quoting issues.
+              Run 'spcc_list monosensor' or 'spcc_list redfilter' in Siril
+              to see available options.
+        """
+        cmd = (
+            f"spcc -monosensor={sensor} "
+            f"-rfilter={red_filter} "
+            f"-gfilter={green_filter} "
+            f"-bfilter={blue_filter}"
+        )
+        return self.execute(cmd)
+
     # Star removal
 
     def starnet(self, stretch: bool = False) -> bool:

@@ -110,6 +110,15 @@ class Config:
     palette: str = "HOO"
     dark_temp_override: Optional[float] = None
 
+    # Color calibration (SPCC)
+    # Use spcc_list command in Siril to see available sensors/filters
+    # Note: SPCC only applies to broadband LRGB, not narrowband SHO
+    spcc_enabled: bool = True
+    spcc_sensor: str = "Sony_IMX571"
+    spcc_red_filter: str = "Optolong_Red"
+    spcc_green_filter: str = "Optolong_Green"
+    spcc_blue_filter: str = "Optolong_Blue"
+
 
 # Default configuration instance
 DEFAULTS = Config()

@@ -127,6 +127,7 @@ class CompositionResult:
     """Result of composition stage."""
 
     linear_path: Path  # Unstretched composed image (for VeraLux)
+    linear_pcc_path: Optional[Path]  # Color-calibrated linear (if PCC succeeded)
     auto_fit: Path  # Auto-stretched .fit
     auto_tif: Path  # Auto-stretched .tif
     auto_jpg: Path  # Auto-stretched .jpg

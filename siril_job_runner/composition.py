@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 from .config import DEFAULTS, Config
+from .fits_utils import check_color_balance
 from .hdr import HDRBlender
 from .logger import JobLogger
 from .models import CompositionResult, StackInfo
@@ -91,6 +92,23 @@ class Composer:
         if self.logger:
             self.logger.step(message)
 
+    def _log_color_balance(self, image_path: Path) -> None:
+        """Check and log color balance for an RGB image."""
+        balance = check_color_balance(image_path)
+        if balance is None:
+            return
+
+        self._log(
+            f"Color balance: R={balance.r_median:.1f}, "
+            f"G={balance.g_median:.1f}, B={balance.b_median:.1f}"
+        )
+
+        if balance.is_imbalanced:
+            self._log(
+                f"WARNING: Color imbalance detected! "
+                f"{balance.dominant_channel} dominates by {balance.dominance_ratio:.1f}x"
+            )
+
     def compose_lrgb(
         self,
         stacks: dict[str, list[StackInfo]],
@@ -168,12 +186,36 @@ class Composer:
         self.siril.load("lrgb")
         self.siril.save(str(linear_path))
         self._log(f"Saved linear: {linear_path.name}")
+        self._log_color_balance(linear_path)
 
-        # Step 6: Auto-stretch and save
-        auto_paths = self._auto_stretch("lrgb", "lrgb_auto")
+        # Step 6: Spectrophotometric Color Calibration (optional)
+        # SPCC uses actual sensor QE and filter curves for accurate calibration
+        linear_pcc_path = None
+        stretch_source = "lrgb"
+
+        if cfg.spcc_enabled:
+            self._log("Color calibration (SPCC)...")
+            if self.siril.spcc(
+                sensor=cfg.spcc_sensor,
+                red_filter=cfg.spcc_red_filter,
+                green_filter=cfg.spcc_green_filter,
+                blue_filter=cfg.spcc_blue_filter,
+            ):
+                linear_pcc_path = self.output_dir / "lrgb_linear_spcc.fit"
+                self.siril.save(str(linear_pcc_path))
+                stretch_source = str(linear_pcc_path)
+                self._log(f"Saved color-calibrated: {linear_pcc_path.name}")
+            else:
+                self._log("SPCC failed, using uncalibrated image")
+        else:
+            self._log("SPCC disabled, skipping color calibration")
+
+        # Step 7: Auto-stretch and save
+        auto_paths = self._auto_stretch(stretch_source, "lrgb_auto")
 
         return CompositionResult(
             linear_path=linear_path,
+            linear_pcc_path=linear_pcc_path,
             auto_fit=auto_paths["fit"],
             auto_tif=auto_paths["tif"],
             auto_jpg=auto_paths["jpg"],
@@ -232,12 +274,37 @@ class Composer:
         linear_path = self.output_dir / "rgb_linear.fit"
         self.siril.load("rgb")
         self.siril.save(str(linear_path))
+        self._log(f"Saved linear: {linear_path.name}")
+        self._log_color_balance(linear_path)
+
+        # Spectrophotometric Color Calibration (optional)
+        # SPCC uses actual sensor QE and filter curves for accurate calibration
+        linear_pcc_path = None
+        stretch_source = "rgb"
+
+        if cfg.spcc_enabled:
+            self._log("Color calibration (SPCC)...")
+            if self.siril.spcc(
+                sensor=cfg.spcc_sensor,
+                red_filter=cfg.spcc_red_filter,
+                green_filter=cfg.spcc_green_filter,
+                blue_filter=cfg.spcc_blue_filter,
+            ):
+                linear_pcc_path = self.output_dir / "rgb_linear_spcc.fit"
+                self.siril.save(str(linear_pcc_path))
+                stretch_source = str(linear_pcc_path)
+                self._log(f"Saved color-calibrated: {linear_pcc_path.name}")
+            else:
+                self._log("SPCC failed, using uncalibrated image")
+        else:
+            self._log("SPCC disabled, skipping color calibration")
 
         # Auto-stretch
-        auto_paths = self._auto_stretch("rgb", "rgb_auto")
+        auto_paths = self._auto_stretch(stretch_source, "rgb_auto")
 
         return CompositionResult(
             linear_path=linear_path,
+            linear_pcc_path=linear_pcc_path,
             auto_fit=auto_paths["fit"],
             auto_tif=auto_paths["tif"],
             auto_jpg=auto_paths["jpg"],
@@ -289,19 +356,14 @@ class Composer:
         channels_sorted = sorted(stacks.keys())
         channel_to_num = {ch: f"{i + 1:05d}" for i, ch in enumerate(channels_sorted)}
 
-        # Linear match to H
-        self._log("Linear matching to H reference...")
-        self.siril.load(f"r_stack_{channel_to_num['H']}")
-        self.siril.save("H")
-
-        cfg = self.config
+        # Note: No linear matching for narrowband
+        # Linear matching destroys the relative intensities between channels
+        # which are needed for proper palette mapping. Each narrowband filter
+        # captures different emission lines with different intrinsic brightness.
+        self._log("Saving registered channels (no linear match for narrowband)...")
         for ch in required:
-            if ch != "H":
-                self.siril.load(f"r_stack_{channel_to_num[ch]}")
-                self.siril.linear_match(
-                    "H", cfg.linear_match_low, cfg.linear_match_high
-                )
-                self.siril.save(ch)
+            self.siril.load(f"r_stack_{channel_to_num[ch]}")
+            self.siril.save(ch)
 
         # Map channels according to palette
         self._log(f"Applying {palette} palette...")
@@ -316,12 +378,18 @@ class Composer:
         linear_path = self.output_dir / f"{type_name}_linear.fit"
         self.siril.load("narrowband")
         self.siril.save(str(linear_path))
+        self._log(f"Saved linear: {linear_path.name}")
+        self._log_color_balance(linear_path)
+
+        # Note: PCC not applicable for narrowband - uses synthetic colors
+        linear_pcc_path = None
 
         # Auto-stretch
         auto_paths = self._auto_stretch("narrowband", f"{type_name}_auto")
 
         return CompositionResult(
             linear_path=linear_path,
+            linear_pcc_path=linear_pcc_path,
             auto_fit=auto_paths["fit"],
             auto_tif=auto_paths["tif"],
             auto_jpg=auto_paths["jpg"],
