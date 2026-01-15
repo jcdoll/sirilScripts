@@ -32,6 +32,19 @@ uv run python run_job.py jobs/M42.json --stage preprocess
 
 sirilpy is required for actual processing but is not available on PyPI. It comes bundled with Siril 1.2+. Make sure Siril is running with scripting enabled before running jobs.
 
+### Siril Catalog Installation (Recommended)
+
+Install local catalogs for faster processing and offline capability.
+
+In Siril GUI: **Scripts > Python Scripts > Core > Siril_Catalog_Installer**
+
+1. **Astrometry Catalog** (~1.5GB): Select "Astrometry Catalog", click Install
+2. **SPCC Catalog** (~5-10GB): Select "SPCC Catalog", enter latitude/longitude, select "Visible from latitude", click Install
+
+Bend, Oregon: Latitude 44.06, Longitude -121.32
+
+Without local SPCC catalog, each job spends ~60s querying Gaia DR3 online. With local catalog, this drops to a few seconds.
+
 ## Directory Structure
 
 The system expects this directory layout:

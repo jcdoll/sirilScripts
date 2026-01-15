@@ -79,16 +79,61 @@ class SirilInterface(Protocol):
     ) -> bool: ...
 
     # Deconvolution
-    def makepsf(self, method: str = "blind") -> bool: ...
-    def rl(self) -> bool: ...
+    def makepsf(
+        self,
+        method: str = "stars",
+        symmetric: bool = True,
+        save_psf: Optional[str] = None,
+    ) -> bool: ...
+    def rl(
+        self,
+        iters: int = 10,
+        regularization: str = "tv",
+        alpha: float = 0.001,
+    ) -> bool: ...
 
     # Stretching
-    def autostretch(self, linked: bool = True) -> bool: ...
+    def autostretch(
+        self,
+        linked: bool = True,
+        shadowclip: float = -2.8,
+        targetbg: float = 0.10,
+    ) -> bool: ...
     def mtf(self, low: float, mid: float, high: float) -> bool: ...
+    def modasinh(
+        self,
+        D: float,
+        LP: float = 0.0,
+        SP: float = 0.0,
+        HP: float = 1.0,
+    ) -> bool: ...
+    def ght(
+        self,
+        D: float,
+        B: float = 0.0,
+        LP: float = 0.0,
+        SP: float = 0.0,
+        HP: float = 1.0,
+    ) -> bool: ...
+    def autoghs(
+        self,
+        shadowsclip: float = 0.0,
+        D: float = 3.0,
+        B: float = 0.0,
+        LP: float = 0.0,
+        HP: float = 1.0,
+        linked: bool = True,
+    ) -> bool: ...
 
     # Color adjustments
     def satu(self, amount: float, threshold: float = 0) -> bool: ...
-    def rmgreen(self) -> bool: ...
+    def rmgreen(
+        self,
+        type: int = 0,
+        amount: float = 1.0,
+        preserve_lightness: bool = True,
+    ) -> bool: ...
+    def negative(self) -> bool: ...
 
     # Header manipulation
     def update_key(self, key: str, value: str, comment: str = "") -> bool: ...

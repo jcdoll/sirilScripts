@@ -70,7 +70,6 @@
   },
   "output": "M42/processed",
   "options": {
-    "fwhm_filter": 1.8,
     "temp_tolerance": 2,
     "dark_temp_override": -10,
     "hdr_low_threshold": 0.7,

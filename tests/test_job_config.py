@@ -148,8 +148,13 @@ def test_config_defaults():
     assert DEFAULTS.hdr_low_threshold == 0.7
     assert DEFAULTS.hdr_high_threshold == 0.9
     # Stretch defaults
-    assert DEFAULTS.mtf_low == 0.20
-    assert DEFAULTS.saturation_amount == 1.0
+    assert DEFAULTS.stretch_method == "autostretch"
+    assert DEFAULTS.stretch_compare is True
+    assert DEFAULTS.autostretch_targetbg == 0.10
+    assert DEFAULTS.ght_D == 3.0
+    assert DEFAULTS.ght_SP == 0.0
+    assert DEFAULTS.autoghs_shadowsclip == 0.0
+    assert DEFAULTS.saturation_amount == 0.15
 
 
 def test_config_override_any_value():
@@ -168,7 +173,7 @@ def test_config_override_any_value():
             # Override various config values
             "hdr_low_threshold": 0.5,
             "hdr_high_threshold": 0.8,
-            "mtf_low": 0.15,
+            "autostretch_targetbg": 0.15,
             "stack_sigma_low": "2.5",
             "clipping_high_16bit": 60000,
         },
@@ -177,7 +182,7 @@ def test_config_override_any_value():
 
     assert job.config.hdr_low_threshold == 0.5
     assert job.config.hdr_high_threshold == 0.8
-    assert job.config.mtf_low == 0.15
+    assert job.config.autostretch_targetbg == 0.15
     assert job.config.stack_sigma_low == "2.5"
     assert job.config.clipping_high_16bit == 60000
     # Unchanged values stay at defaults

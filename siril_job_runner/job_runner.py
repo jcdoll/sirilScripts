@@ -30,6 +30,7 @@ class JobRunner:
         base_path: Path,
         siril: Optional[SirilInterface] = None,
         dry_run: bool = False,
+        force: bool = False,
     ):
         self.job_path = Path(job_path)
         self.base_path = Path(base_path)
@@ -38,6 +39,12 @@ class JobRunner:
 
         # Load job config
         self.config = load_job(self.job_path)
+
+        # CLI --force overrides job file setting
+        if force:
+            from dataclasses import replace
+
+            self.config.config = replace(self.config.config, force_reprocess=True)
 
         # Set up paths
         self.output_dir = self.base_path / self.config.output

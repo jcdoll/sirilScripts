@@ -33,12 +33,29 @@ class Config:
     # Fallback values
     default_temperature: float = 0.0  # Used when temperature not in FITS header
 
-    # Auto-stretch pipeline
-    mtf_low: float = 0.20
-    mtf_mid: float = 0.5
-    mtf_high: float = 1.0
-    saturation_amount: float = 1.0
-    saturation_threshold: float = 0.0
+    # Stretch method: "autostretch", "modasinh", "ght", "autoghs"
+    stretch_method: str = "autostretch"
+
+    # Compare all stretch methods (saves each with suffix for comparison)
+    stretch_compare: bool = True
+
+    # Autostretch parameters
+    autostretch_linked: bool = True  # False for narrowband
+    autostretch_shadowclip: float = -2.8  # Shadows clipping in sigma from peak
+    autostretch_targetbg: float = 0.10  # Target background brightness (lower=darker)
+
+    # GHT / modasinh / autoghs parameters
+    # modasinh ignores ght_B; autoghs ignores ght_SP (calculates it)
+    ght_D: float = 3.0  # Stretch strength (0-10)
+    ght_B: float = 0.0  # Focal point, GHT only (-5 to 15)
+    ght_LP: float = 0.0  # Shadow protection
+    ght_SP: float = 0.0  # Symmetry point (ght/modasinh only, autoghs ignores)
+    ght_HP: float = 0.85  # Highlight protection - preserves stars
+    autoghs_shadowsclip: float = 0.0  # k*sigma from median for SP calculation
+
+    # Saturation (runs after all stretch methods)
+    saturation_amount: float = 0.15  # 1.0 = +100%, 0.15 = subtle boost
+    saturation_background_factor: float = 1.0  # Threshold factor (0 disables)
 
     # Processing parameters
     temp_tolerance: float = 2.0
@@ -61,11 +78,40 @@ class Config:
     fwhm_broad_percentile: float = 95.0  # percentile for broad symmetric case
 
     # Background extraction (post-stack subsky)
+    # Disable for narrowband (H/O/S) which has inherently low sky background
+    subsky_enabled: bool = True
     subsky_rbf: bool = True  # Use RBF interpolation (preferred) vs polynomial degree
     subsky_degree: int = 1  # Polynomial degree if subsky_rbf is False
     subsky_samples: int = 20
     subsky_tolerance: float = 1.0
     subsky_smooth: float = 0.5
+
+    # Deconvolution (sharpening via Richardson-Lucy)
+    # For LRGB: runs on L stack and RGB composite
+    # For RGB/SHO/HOO: runs on combined image
+    # Docs: https://siril.readthedocs.io/en/stable/processing/deconvolution.html
+    # Tips: https://siril.readthedocs.io/en/stable/processing/deconvolution.html#deconvolution-usage-tips
+    deconv_enabled: bool = False
+    deconv_psf_method: str = (
+        "stars"  # "stars" (from detected stars) or "blind" (estimate)
+    )
+    deconv_save_psf: bool = True  # Save PSF images for inspection
+    deconv_iterations: int = 10
+    deconv_regularization: str = (
+        "tv"  # "tv" (Total Variation) or "fh" (Frobenius Hessian)
+    )
+    deconv_alpha: float = 3000.0  # Regularization strength (Siril default: 3000)
+
+    # Color cast removal (SCNR - Subtractive Chromatic Noise Reduction)
+    # Applied after color calibration, before stretch
+    # For green cast: use rmgreen directly
+    # For magenta cast: use negative-rmgreen-negative technique
+    color_removal_mode: str = "none"  # "none", "green", "magenta"
+    rmgreen_type: int = (
+        0  # 0=average neutral, 1=maximum neutral, 2=max mask, 3=additive
+    )
+    rmgreen_amount: float = 1.0  # Strength 0-1, only for types 2/3
+    rmgreen_preserve_lightness: bool = True
 
     # Light frame stacking
     stack_rejection: str = "rej"
@@ -109,6 +155,7 @@ class Config:
     denoise: bool = False
     palette: str = "HOO"
     dark_temp_override: Optional[float] = None
+    force_reprocess: bool = False  # Force re-stacking even if cached
 
     # Color calibration (SPCC)
     # Use spcc_list command in Siril to see available sensors/filters

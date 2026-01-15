@@ -151,6 +151,32 @@ class Preprocessor:
                 f"Cleaned {removed} old files/dirs from {process_dir.name}"
             )
 
+    def _is_stack_cached(
+        self,
+        stack_path: Path,
+        frames: list,
+        bias_master: Path,
+        dark_master: Path,
+        flat_master: Path,
+    ) -> bool:
+        """Check if stack exists and is newer than all sources."""
+        if not stack_path.exists():
+            return False
+
+        stack_mtime = stack_path.stat().st_mtime
+
+        # Check all source frames
+        for frame in frames:
+            if frame.path.stat().st_mtime > stack_mtime:
+                return False
+
+        # Check calibration masters
+        for master in [bias_master, dark_master, flat_master]:
+            if master.stat().st_mtime > stack_mtime:
+                return False
+
+        return True
+
     def process_stack_group(
         self,
         group: StackGroup,
@@ -158,12 +184,32 @@ class Preprocessor:
         bias_master: Path,
         dark_master: Path,
         flat_master: Path,
+        force: bool = False,
     ) -> Path:
         """
         Process a single stack group (filter + exposure).
 
+        Args:
+            force: If True, reprocess even if cached stack exists.
+
         Returns path to the stacked result.
         """
+        stacks_dir = output_dir / "stacks"
+        stacks_dir.mkdir(parents=True, exist_ok=True)
+        stack_path = stacks_dir / f"{group.stack_name}.fit"
+
+        # Check cache first
+        if not force and self._is_stack_cached(
+            stack_path, group.frames, bias_master, dark_master, flat_master
+        ):
+            if self.logger:
+                self.logger.step(
+                    f"Using cached {group.filter_name} @ {group.exposure_str} "
+                    f"({len(group.frames)} frames)"
+                )
+            self._log(f"Stack is up-to-date: {stack_path.name}")
+            return stack_path
+
         if self.logger:
             self.logger.step(
                 f"Preprocessing {group.filter_name} @ {group.exposure_str} "
@@ -173,9 +219,7 @@ class Preprocessor:
         process_dir = (
             output_dir / "process" / f"{group.filter_name}_{group.exposure_str}"
         )
-        stacks_dir = output_dir / "stacks"
         process_dir.mkdir(parents=True, exist_ok=True)
-        stacks_dir.mkdir(parents=True, exist_ok=True)
 
         self._clean_process_dir(process_dir)
 
@@ -285,21 +329,26 @@ class Preprocessor:
         if not stack_path.exists():
             raise FileNotFoundError(f"Stack output not created: {stack_path}")
 
-        # Background extraction on stacked image
-        self._log("Background extraction...")
-        if not self.siril.load(str(stack_path)):
-            raise RuntimeError(f"Failed to load stack: {stack_path}")
-        if self.siril.subsky(
-            rbf=cfg.subsky_rbf,
-            degree=cfg.subsky_degree,
-            samples=cfg.subsky_samples,
-            tolerance=cfg.subsky_tolerance,
-            smooth=cfg.subsky_smooth,
-        ):
-            if not self.siril.save(str(stack_path)):
-                raise RuntimeError(f"Failed to save stack after subsky: {stack_path}")
+        # Background extraction on stacked image (optional)
+        if cfg.subsky_enabled:
+            self._log("Background extraction...")
+            if not self.siril.load(str(stack_path)):
+                raise RuntimeError(f"Failed to load stack: {stack_path}")
+            if self.siril.subsky(
+                rbf=cfg.subsky_rbf,
+                degree=cfg.subsky_degree,
+                samples=cfg.subsky_samples,
+                tolerance=cfg.subsky_tolerance,
+                smooth=cfg.subsky_smooth,
+            ):
+                if not self.siril.save(str(stack_path)):
+                    raise RuntimeError(
+                        f"Failed to save stack after subsky: {stack_path}"
+                    )
+            else:
+                self._log("Background extraction failed, continuing without")
         else:
-            self._log("Background extraction failed, continuing without")
+            self._log("Background extraction disabled")
 
         self._log(f"Complete -> {stack_path.name}")
         return stack_path
@@ -354,6 +403,7 @@ def preprocess_with_exposure_groups(
             bias_master=bias,
             dark_master=dark,
             flat_master=flat,
+            force=config.force_reprocess,
         )
         results[group.stack_name] = stack_path
 

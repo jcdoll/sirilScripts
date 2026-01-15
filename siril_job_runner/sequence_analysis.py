@@ -113,24 +113,25 @@ def parse_sequence_file(seq_path: Path) -> Optional[RegistrationStats]:
     wfwhm = np.array(wfwhm_list)
     roundness = np.array(roundness_list)
 
+    # Use wFWHM for all analysis since Siril's seqapplyreg filters by wFWHM
     # Compute histogram bins (1px wide, from floor to ceil)
-    bin_min = max(0, int(np.floor(fwhm.min())))
-    bin_max = int(np.ceil(fwhm.max())) + 1
-    hist_counts, hist_bins = np.histogram(fwhm, bins=range(bin_min, bin_max + 1))
+    bin_min = max(0, int(np.floor(wfwhm.min())))
+    bin_max = int(np.ceil(wfwhm.max())) + 1
+    hist_counts, hist_bins = np.histogram(wfwhm, bins=range(bin_min, bin_max + 1))
 
     return RegistrationStats(
-        n_images=len(fwhm),
+        n_images=len(wfwhm),
         fwhm_values=fwhm,
         wfwhm_values=wfwhm,
         roundness_values=roundness,
-        median=float(np.median(fwhm)),
-        mean=float(np.mean(fwhm)),
-        std=float(np.std(fwhm)),
-        cv=float(np.std(fwhm) / np.mean(fwhm)) if np.mean(fwhm) > 0 else 0.0,
-        skewness=float(skew(fwhm)),
-        mad=float(median_abs_deviation(fwhm)),
-        q1=float(np.percentile(fwhm, 25)),
-        q3=float(np.percentile(fwhm, 75)),
+        median=float(np.median(wfwhm)),
+        mean=float(np.mean(wfwhm)),
+        std=float(np.std(wfwhm)),
+        cv=float(np.std(wfwhm) / np.mean(wfwhm)) if np.mean(wfwhm) > 0 else 0.0,
+        skewness=float(skew(wfwhm)),
+        mad=float(median_abs_deviation(wfwhm)),
+        q1=float(np.percentile(wfwhm, 25)),
+        q3=float(np.percentile(wfwhm, 75)),
         hist_bins=hist_bins,
         hist_counts=hist_counts,
     )
@@ -207,7 +208,8 @@ def compute_adaptive_threshold(
     Returns:
         Updated RegistrationStats with threshold and analysis
     """
-    fwhm = stats.fwhm_values
+    # Use wFWHM since that's what Siril's seqapplyreg filters on
+    fwhm = stats.wfwhm_values
 
     # Case 0: Not enough images for statistical filtering
     if stats.n_images < config.fwhm_min_images:
@@ -308,7 +310,7 @@ def format_histogram(stats: RegistrationStats, width: int = 30) -> list[str]:
     if len(stats.hist_counts) == 0:
         return []
 
-    lines = ["FWHM distribution:"]
+    lines = ["wFWHM distribution:"]
     max_count = max(stats.hist_counts) if len(stats.hist_counts) > 0 else 1
 
     for i, count in enumerate(stats.hist_counts):

@@ -121,6 +121,12 @@ Examples:
         help="Write output to timestamped log file in logs/ folder",
     )
 
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force reprocessing even if cached stacks exist",
+    )
+
     args = parser.parse_args()
 
     # Set up logging to file if requested
@@ -179,6 +185,7 @@ Examples:
             base_path=base_path,
             siril=siril,
             dry_run=args.dry_run,
+            force=args.force,
         )
 
         if args.validate:

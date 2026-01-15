@@ -22,6 +22,8 @@
   "output": "IC443/processed",
   "options": {
     "palette": "SHO",
-    "dark_temp_override": -10
+    "dark_temp_override": -10,
+    "subsky_enabled": false,
+    "autostretch_linked": false
   }
 }

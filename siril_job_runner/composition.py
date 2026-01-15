@@ -15,6 +15,7 @@ from .hdr import HDRBlender
 from .logger import JobLogger
 from .models import CompositionResult, StackInfo
 from .protocols import SirilInterface
+from .psf_analysis import analyze_psf, format_psf_stats
 
 # Narrowband palette definitions (channel mappings)
 PALETTES = {
@@ -109,17 +110,43 @@ class Composer:
                 f"{balance.dominant_channel} dominates by {balance.dominance_ratio:.1f}x"
             )
 
+    def _apply_color_removal(self) -> bool:
+        """Apply color cast removal based on config mode."""
+        cfg = self.config
+        if cfg.color_removal_mode == "none":
+            return True
+
+        if cfg.color_removal_mode == "green":
+            self._log("Removing green cast (SCNR)...")
+            return self.siril.rmgreen(
+                type=cfg.rmgreen_type,
+                amount=cfg.rmgreen_amount,
+                preserve_lightness=cfg.rmgreen_preserve_lightness,
+            )
+        elif cfg.color_removal_mode == "magenta":
+            self._log("Removing magenta cast (negative-SCNR-negative)...")
+            if not self.siril.negative():
+                return False
+            if not self.siril.rmgreen(
+                type=cfg.rmgreen_type,
+                amount=cfg.rmgreen_amount,
+                preserve_lightness=cfg.rmgreen_preserve_lightness,
+            ):
+                return False
+            return self.siril.negative()
+        else:
+            self._log(f"Unknown color_removal_mode: {cfg.color_removal_mode}")
+            return True
+
     def compose_lrgb(
         self,
         stacks: dict[str, list[StackInfo]],
-        deconvolve_l: bool = True,
     ) -> CompositionResult:
         """
         Compose LRGB image from stacked channels.
 
         Args:
             stacks: Dict from discover_stacks() - filter name to list of StackInfo
-            deconvolve_l: Whether to deconvolve L channel
 
         Returns CompositionResult with paths to all outputs.
         """
@@ -165,13 +192,34 @@ class Composer:
 
         # Step 3: Optional deconvolution on L
         l_name = "L"
-        if deconvolve_l:
+        if cfg.deconv_enabled:
             self._log("Deconvolving L channel...")
             self.siril.load("L")
-            self.siril.makepsf("blind")
-            self.siril.rl()
-            self.siril.save("L_deconv")
-            l_name = "L_deconv"
+            psf_path = (
+                str(self.output_dir / "psf_L.fit") if cfg.deconv_save_psf else None
+            )
+            if self.siril.makepsf(
+                method=cfg.deconv_psf_method,
+                symmetric=True,
+                save_psf=psf_path,
+            ):
+                if psf_path:
+                    self._log("PSF saved: psf_L.fit")
+                    psf_stats = analyze_psf(Path(psf_path))
+                    if psf_stats:
+                        for line in format_psf_stats(psf_stats):
+                            self._log(f"  {line}")
+                if self.siril.rl(
+                    iters=cfg.deconv_iterations,
+                    regularization=cfg.deconv_regularization,
+                    alpha=cfg.deconv_alpha,
+                ):
+                    self.siril.save("L_deconv")
+                    l_name = "L_deconv"
+                else:
+                    self._log("Deconvolution failed, using original L")
+            else:
+                self._log("PSF creation failed, skipping deconvolution")
 
         # Step 4: Compose RGB
         self._log("Creating RGB composite...")
@@ -210,7 +258,47 @@ class Composer:
         else:
             self._log("SPCC disabled, skipping color calibration")
 
-        # Step 7: Auto-stretch and save
+        # Step 7: Color cast removal
+        if cfg.color_removal_mode != "none":
+            self.siril.load(stretch_source)
+            if self._apply_color_removal():
+                self.siril.save(stretch_source)
+            else:
+                self._log("Color removal failed, continuing without")
+
+        # Step 8: Optional deconvolution on RGB composite
+        if cfg.deconv_enabled:
+            self._log("Deconvolving RGB composite...")
+            self.siril.load(stretch_source)
+            psf_path = (
+                str(self.output_dir / "psf_lrgb.fit") if cfg.deconv_save_psf else None
+            )
+            if self.siril.makepsf(
+                method=cfg.deconv_psf_method,
+                symmetric=True,
+                save_psf=psf_path,
+            ):
+                if psf_path:
+                    self._log("PSF saved: psf_lrgb.fit")
+                    psf_stats = analyze_psf(Path(psf_path))
+                    if psf_stats:
+                        for line in format_psf_stats(psf_stats):
+                            self._log(f"  {line}")
+                if self.siril.rl(
+                    iters=cfg.deconv_iterations,
+                    regularization=cfg.deconv_regularization,
+                    alpha=cfg.deconv_alpha,
+                ):
+                    deconv_path = self.output_dir / "lrgb_deconv.fit"
+                    self.siril.save(str(deconv_path))
+                    stretch_source = str(deconv_path)
+                    self._log(f"Saved deconvolved: {deconv_path.name}")
+                else:
+                    self._log("RGB deconvolution failed, using original")
+            else:
+                self._log("RGB PSF creation failed, skipping deconvolution")
+
+        # Step 8: Auto-stretch and save
         auto_paths = self._auto_stretch(stretch_source, "lrgb_auto")
 
         return CompositionResult(
@@ -299,6 +387,46 @@ class Composer:
         else:
             self._log("SPCC disabled, skipping color calibration")
 
+        # Color cast removal
+        if cfg.color_removal_mode != "none":
+            self.siril.load(stretch_source)
+            if self._apply_color_removal():
+                self.siril.save(stretch_source)
+            else:
+                self._log("Color removal failed, continuing without")
+
+        # Optional deconvolution on RGB composite
+        if cfg.deconv_enabled:
+            self._log("Deconvolving RGB composite...")
+            self.siril.load(stretch_source)
+            psf_path = (
+                str(self.output_dir / "psf_rgb.fit") if cfg.deconv_save_psf else None
+            )
+            if self.siril.makepsf(
+                method=cfg.deconv_psf_method,
+                symmetric=True,
+                save_psf=psf_path,
+            ):
+                if psf_path:
+                    self._log("PSF saved: psf_rgb.fit")
+                    psf_stats = analyze_psf(Path(psf_path))
+                    if psf_stats:
+                        for line in format_psf_stats(psf_stats):
+                            self._log(f"  {line}")
+                if self.siril.rl(
+                    iters=cfg.deconv_iterations,
+                    regularization=cfg.deconv_regularization,
+                    alpha=cfg.deconv_alpha,
+                ):
+                    deconv_path = self.output_dir / "rgb_deconv.fit"
+                    self.siril.save(str(deconv_path))
+                    stretch_source = str(deconv_path)
+                    self._log(f"Saved deconvolved: {deconv_path.name}")
+                else:
+                    self._log("RGB deconvolution failed, using original")
+            else:
+                self._log("RGB PSF creation failed, skipping deconvolution")
+
         # Auto-stretch
         auto_paths = self._auto_stretch(stretch_source, "rgb_auto")
 
@@ -384,8 +512,53 @@ class Composer:
         # Note: PCC not applicable for narrowband - uses synthetic colors
         linear_pcc_path = None
 
+        # Color cast removal - especially useful for narrowband
+        cfg = self.config
+        stretch_source = "narrowband"
+        if cfg.color_removal_mode != "none":
+            self.siril.load("narrowband")
+            if self._apply_color_removal():
+                self.siril.save(str(linear_path))
+                stretch_source = str(linear_path)
+            else:
+                self._log("Color removal failed, continuing without")
+
+        # Optional deconvolution on narrowband composite
+        if cfg.deconv_enabled:
+            self._log("Deconvolving narrowband composite...")
+            self.siril.load("narrowband")
+            psf_path = (
+                str(self.output_dir / f"psf_{type_name}.fit")
+                if cfg.deconv_save_psf
+                else None
+            )
+            if self.siril.makepsf(
+                method=cfg.deconv_psf_method,
+                symmetric=True,
+                save_psf=psf_path,
+            ):
+                if psf_path:
+                    self._log(f"PSF saved: psf_{type_name}.fit")
+                    psf_stats = analyze_psf(Path(psf_path))
+                    if psf_stats:
+                        for line in format_psf_stats(psf_stats):
+                            self._log(f"  {line}")
+                if self.siril.rl(
+                    iters=cfg.deconv_iterations,
+                    regularization=cfg.deconv_regularization,
+                    alpha=cfg.deconv_alpha,
+                ):
+                    deconv_path = self.output_dir / f"{type_name}_deconv.fit"
+                    self.siril.save(str(deconv_path))
+                    stretch_source = str(deconv_path)
+                    self._log(f"Saved deconvolved: {deconv_path.name}")
+                else:
+                    self._log("Narrowband deconvolution failed, using original")
+            else:
+                self._log("PSF creation failed, skipping deconvolution")
+
         # Auto-stretch
-        auto_paths = self._auto_stretch("narrowband", f"{type_name}_auto")
+        auto_paths = self._auto_stretch(stretch_source, f"{type_name}_auto")
 
         return CompositionResult(
             linear_path=linear_path,
@@ -396,25 +569,52 @@ class Composer:
             stacks_dir=self.stacks_dir,
         )
 
-    def _auto_stretch(self, input_name: str, output_name: str) -> dict[str, Path]:
-        """
-        Apply auto-stretch pipeline and save in multiple formats.
-
-        Pipeline from LRGB_compose.ssf:
-        - autostretch
-        - mtf 0.20 0.5 1.0
-        - satu 1 0
-        """
-        self._log("Auto-stretching...")
-
+    def _apply_stretch(self, method: str) -> None:
+        """Apply a single stretch method to currently loaded image."""
         cfg = self.config
-        self.siril.load(input_name)
-        self.siril.autostretch(linked=True)
-        self.siril.mtf(cfg.mtf_low, cfg.mtf_mid, cfg.mtf_high)
-        self.siril.satu(cfg.saturation_amount, cfg.saturation_threshold)
+        if method == "autostretch":
+            mode = "linked" if cfg.autostretch_linked else "unlinked"
+            self._log(
+                f"Stretching (autostretch, {mode}, targetbg={cfg.autostretch_targetbg})..."
+            )
+            self.siril.autostretch(
+                linked=cfg.autostretch_linked,
+                shadowclip=cfg.autostretch_shadowclip,
+                targetbg=cfg.autostretch_targetbg,
+            )
+        elif method == "modasinh":
+            self._log(
+                f"Stretching (modasinh, D={cfg.ght_D}, SP={cfg.ght_SP}, HP={cfg.ght_HP})..."
+            )
+            self.siril.modasinh(
+                D=cfg.ght_D, LP=cfg.ght_LP, SP=cfg.ght_SP, HP=cfg.ght_HP
+            )
+        elif method == "ght":
+            self._log(
+                f"Stretching (GHT, D={cfg.ght_D}, SP={cfg.ght_SP}, HP={cfg.ght_HP})..."
+            )
+            self.siril.ght(
+                D=cfg.ght_D, B=cfg.ght_B, LP=cfg.ght_LP, SP=cfg.ght_SP, HP=cfg.ght_HP
+            )
+        elif method == "autoghs":
+            self._log(
+                f"Stretching (autoghs, D={cfg.ght_D}, shadowsclip={cfg.autoghs_shadowsclip}, HP={cfg.ght_HP})..."
+            )
+            self.siril.autoghs(
+                shadowsclip=cfg.autoghs_shadowsclip,
+                D=cfg.ght_D,
+                B=cfg.ght_B,
+                LP=cfg.ght_LP,
+                HP=cfg.ght_HP,
+                linked=cfg.autostretch_linked,
+            )
+        else:
+            raise ValueError(f"Unknown stretch method: {method}")
 
-        # Save in multiple formats
-        # Note: Siril auto-adds extensions, so pass path without extension
+    def _save_stretched(self, output_name: str) -> dict[str, Path]:
+        """Save currently loaded (stretched) image in multiple formats."""
+        cfg = self.config
+        self.siril.satu(cfg.saturation_amount, cfg.saturation_background_factor)
         self.siril.cd(str(self.output_dir))
 
         fit_path = self.output_dir / f"{output_name}.fit"
@@ -426,8 +626,37 @@ class Composer:
         self.siril.savejpg(str(self.output_dir / output_name), 90)
 
         self._log(f"Saved: {fit_path.name}, {tif_path.name}, {jpg_path.name}")
-
         return {"fit": fit_path, "tif": tif_path, "jpg": jpg_path}
+
+    def _auto_stretch(self, input_name: str, output_name: str) -> dict[str, Path]:
+        """
+        Apply stretch and saturation, save in multiple formats.
+
+        If stretch_compare is enabled, applies all methods and saves each.
+        """
+        cfg = self.config
+
+        if cfg.stretch_compare:
+            # Compare mode: apply all stretch methods
+            methods = ["autostretch", "modasinh", "ght", "autoghs"]
+            self._log("Comparing all stretch methods...")
+            primary_paths = None
+
+            for method in methods:
+                self.siril.load(input_name)
+                self._apply_stretch(method)
+                suffix = f"{output_name}_{method}"
+                paths = self._save_stretched(suffix)
+                # Use first method as primary return
+                if primary_paths is None:
+                    primary_paths = paths
+
+            return primary_paths
+        else:
+            # Single method mode
+            self.siril.load(input_name)
+            self._apply_stretch(cfg.stretch_method)
+            return self._save_stretched(output_name)
 
 
 def compose_and_stretch(
@@ -435,7 +664,6 @@ def compose_and_stretch(
     output_dir: Path,
     job_type: str,
     palette: str = "HOO",
-    deconvolve_l: bool = True,
     config: Config = DEFAULTS,
     logger: Optional[JobLogger] = None,
 ) -> CompositionResult:
@@ -450,7 +678,6 @@ def compose_and_stretch(
         output_dir: Output directory (contains stacks/ subdirectory)
         job_type: "LRGB", "RGB", "SHO", or "HOO"
         palette: Narrowband palette (for SHO/HOO)
-        deconvolve_l: Whether to deconvolve L channel (LRGB only)
         config: Configuration with processing parameters
         logger: Optional logger
 
@@ -494,7 +721,7 @@ def compose_and_stretch(
     composer = Composer(siril, output_dir, config, logger)
 
     if job_type == "LRGB":
-        return composer.compose_lrgb(stacks, deconvolve_l=deconvolve_l)
+        return composer.compose_lrgb(stacks)
     elif job_type == "RGB":
         return composer.compose_rgb(stacks)
     elif job_type in ("SHO", "HOO"):
