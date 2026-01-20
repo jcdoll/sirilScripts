@@ -91,6 +91,10 @@ class SirilColorMixin:
         red_filter: str,
         green_filter: str,
         blue_filter: str,
+        whiteref: str = "Average Spiral Galaxy",
+        bgtol_upper: float = 2.0,
+        bgtol_lower: float = 2.8,
+        obsheight: int = 1000,
     ) -> bool:
         """
         Spectrophotometric Color Calibration on loaded image.
@@ -99,20 +103,29 @@ class SirilColorMixin:
         color calibration. Preferable to PCC when filter profiles are known.
 
         Args:
-            sensor: Mono sensor name (e.g., "Sony_IMX571")
-            red_filter: Red filter name (e.g., "Optolong_Red")
-            green_filter: Green filter name (e.g., "Optolong_Green")
-            blue_filter: Blue filter name (e.g., "Optolong_Blue")
+            sensor: Mono sensor name (e.g., "Sony IMX571")
+            red_filter: Red filter name (e.g., "Baader R")
+            green_filter: Green filter name (e.g., "Baader G")
+            blue_filter: Blue filter name (e.g., "Baader B")
+            whiteref: White reference target (e.g., "Average Spiral Galaxy")
+            bgtol_upper: Background tolerance upper bound in sigma (default 2.0)
+            bgtol_lower: Background tolerance lower bound in sigma (default 2.8, meaning -2.8)
+            obsheight: Observation height in meters for atmospheric correction (default 1000)
 
-        Note: Use underscores instead of spaces in names to avoid quoting issues.
+        Note: Names with spaces are automatically quoted.
               Run 'spcc_list monosensor' or 'spcc_list redfilter' in Siril
               to see available options.
         """
+        # Siril quoting rule: arguments with spaces need quotes around the
+        # entire argument including the -flag part, e.g. "-monosensor=Sony IMX571"
         cmd = (
-            f"spcc -monosensor={sensor} "
-            f"-rfilter={red_filter} "
-            f"-gfilter={green_filter} "
-            f"-bfilter={blue_filter}"
+            f'spcc "-monosensor={sensor}" '
+            f'"-rfilter={red_filter}" '
+            f'"-gfilter={green_filter}" '
+            f'"-bfilter={blue_filter}" '
+            f'"-whiteref={whiteref}" '
+            f"-bgtol={bgtol_upper},{bgtol_lower} "
+            f"-atmos -obsheight={obsheight}"
         )
         return self.execute(cmd)
 

@@ -157,7 +157,11 @@ def format_stats_log(stats: RegistrationStats) -> list[str]:
         )
 
     # GMM mode details if bimodal
-    if stats.is_bimodal and stats.gmm_means is not None and stats.gmm_weights is not None:
+    if (
+        stats.is_bimodal
+        and stats.gmm_means is not None
+        and stats.gmm_weights is not None
+    ):
         sorted_idx = np.argsort(stats.gmm_means)
         mode_strs = [
             f"{stats.gmm_means[i]:.2f}px (w={stats.gmm_weights[i]:.2f})"

@@ -46,7 +46,7 @@ class Config:
 
     # VeraLux HyperMetric Stretch parameters
     # Based on https://gitlab.com/free-astro/siril-scripts/-/blob/main/VeraLux/
-    veralux_target_median: float = 0.20  # Target background median after stretch
+    veralux_target_median: float = 0.15  # Target background median after stretch
     veralux_b: float = 6.0  # Highlight protection / curve knee (higher preserves stars)
     veralux_log_d_min: float = 0.0  # Min log_d for binary search (D = 10^log_d)
     veralux_log_d_max: float = 7.0  # Max log_d for binary search
@@ -98,6 +98,13 @@ class Config:
     temp_tolerance: float = 2.0
     linear_match_low: float = 0.0
     linear_match_high: float = 0.92
+    linear_match_reference: str = (
+        "R"  # Reference channel for linear matching: "R", "G", or "B"
+    )
+    # Diagnostic outputs (for debugging color issues)
+    diagnostic_previews: bool = (
+        False  # Save stretched previews of individual stacks and RGB
+    )
 
     # FWHM adaptive filtering (after registration)
     # Decision tree:
@@ -198,10 +205,14 @@ class Config:
     # Use spcc_list command in Siril to see available sensors/filters
     # Note: SPCC only applies to broadband LRGB, not narrowband SHO
     spcc_enabled: bool = True
-    spcc_sensor: str = "Sony_IMX571"
-    spcc_red_filter: str = "Optolong_Red"
-    spcc_green_filter: str = "Optolong_Green"
-    spcc_blue_filter: str = "Optolong_Blue"
+    spcc_sensor: str = "Sony IMX411/455/461/533/571"
+    spcc_red_filter: str = "Optolong Red"
+    spcc_green_filter: str = "Optolong Green"
+    spcc_blue_filter: str = "Optolong Blue"
+    spcc_whiteref: str = "Average Spiral Galaxy"
+    spcc_bgtol_upper: float = 2.0
+    spcc_bgtol_lower: float = 2.8  # Specified as positive, means -2.8 sigma
+    spcc_obsheight: int = 1000  # Observation height in meters
 
 
 # Default configuration instance

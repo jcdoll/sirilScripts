@@ -31,13 +31,15 @@
   "output": "M31/processed",
   "options": {
     "dark_temp_override": -10,
-    "deconv_enabled": true,
-    "color_removal_mode": "none",
+    "stretch_method": "veralux",
+    "deconv_enabled": false,
+    "color_removal_mode": "green",
     "spcc_enabled": true,
-    "veralux_silentium_enabled": true,
-    "veralux_revela_enabled": true,
-    "veralux_vectra_enabled": true,
+    "veralux_silentium_enabled": false,
+    "veralux_revela_enabled": false,
+    "veralux_vectra_enabled": false,
     "starnet_enabled": true,
-    "veralux_starcomposer_enabled": true
+    "veralux_starcomposer_enabled": true,
+    "diagnostic_previews": true
   }
 }

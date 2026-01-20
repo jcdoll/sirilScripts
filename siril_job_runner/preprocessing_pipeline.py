@@ -100,13 +100,19 @@ def run_pipeline(
     Returns:
         Path to the stacked result
     """
-    for name, path in [
-        ("bias", bias_master),
-        ("dark", dark_master),
-        ("flat", flat_master),
-    ]:
-        if not path.exists():
-            raise FileNotFoundError(f"Calibration master not found: {name} at {path}")
+    # Validate required calibration files
+    # Flat is always required
+    if not flat_master.exists():
+        raise FileNotFoundError(f"Calibration master not found: flat at {flat_master}")
+    # Need either dark (preferred) or bias
+    if dark_master and dark_master.exists():
+        pass  # Dark contains bias, we're good
+    elif bias_master and bias_master.exists():
+        pass  # No dark, but have bias
+    else:
+        raise FileNotFoundError(
+            f"Need either dark or bias master. dark={dark_master}, bias={bias_master}"
+        )
 
     seq_path = process_dir / "light.seq"
     if log_fn:
@@ -118,13 +124,25 @@ def run_pipeline(
     cfg = config
     if not siril.cd(str(process_dir)):
         raise RuntimeError(f"Failed to cd to process directory: {process_dir}")
-    if not siril.calibrate(
-        "light",
-        bias=str(bias_master),
-        dark=str(dark_master),
-        flat=str(flat_master),
-    ):
-        raise RuntimeError("Failed to calibrate light sequence")
+
+    # Smart calibration: dark already contains bias, so don't pass both.
+    # Only use bias separately if no dark is available.
+    if dark_master and dark_master.exists():
+        # Dark contains bias - use dark + flat only
+        if not siril.calibrate(
+            "light",
+            dark=str(dark_master),
+            flat=str(flat_master),
+        ):
+            raise RuntimeError("Failed to calibrate light sequence")
+    else:
+        # No dark - use bias + flat
+        if not siril.calibrate(
+            "light",
+            bias=str(bias_master),
+            flat=str(flat_master),
+        ):
+            raise RuntimeError("Failed to calibrate light sequence")
 
     if log_fn:
         log_fn("Registering (2-pass)...")
