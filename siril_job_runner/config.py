@@ -34,7 +34,7 @@ class Config:
     default_temperature: float = 0.0  # Used when temperature not in FITS header
 
     # Stretch method: "autostretch" or "veralux"
-    stretch_method: str = "autostretch"
+    stretch_method: str = "veralux"
 
     # Compare stretch methods (saves both autostretch and veralux for comparison)
     stretch_compare: bool = True
@@ -110,7 +110,7 @@ class Config:
     )
     # Diagnostic outputs (for debugging color issues)
     diagnostic_previews: bool = (
-        False  # Save stretched previews of individual stacks and RGB
+        True  # Save stretched previews of individual stacks and RGB
     )
 
     # FWHM adaptive filtering (after registration)
@@ -139,10 +139,10 @@ class Config:
     pre_stack_subsky_smooth: float = 0.5  # RBF smoothing (0-1, higher=smoother)
 
     # Background extraction - Post-stack (subsky on each channel stack)
-    # Applied after stacking, before cross-registration. Can clean up residual
-    # gradients that seqsubsky missed due to stacking combining gradients.
-    post_stack_subsky_method: str = "none"  # "none", "rbf", "poly"
-    post_stack_subsky_degree: int = 1  # Polynomial degree if method="poly"
+    # Applied after cross-registration, before RGB composition. Can clean up
+    # residual gradients that seqsubsky missed due to stacking combining gradients.
+    post_stack_subsky_method: str = "poly"  # "none", "rbf", "poly"
+    post_stack_subsky_degree: int = 2  # Polynomial degree if method="poly"
     post_stack_subsky_samples: int = 20
     post_stack_subsky_tolerance: float = 1.0
     post_stack_subsky_smooth: float = 0.5  # RBF smoothing (0-1, higher=smoother)

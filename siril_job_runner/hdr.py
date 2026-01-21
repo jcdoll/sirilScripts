@@ -216,7 +216,11 @@ class HDRBlender:
 
         for channel, stacks in stacks_by_channel.items():
             if len(stacks) > 1:
-                output_path = output_dir / f"stack_{channel}_HDR.fit"
+                # Use numbered naming matching LRGB_CHANNEL_INDEX: B=00001, G=00002, L=00003, R=00004
+                channel_to_idx = {"B": "00001", "G": "00002", "L": "00003", "R": "00004",
+                                  "H": "00001", "O": "00002", "S": "00003"}  # Also support narrowband
+                idx = channel_to_idx.get(channel, channel)
+                output_path = output_dir / f"stack_{idx}.fit"
                 results[channel] = self.blend_channel(channel, stacks, output_path)
             elif len(stacks) == 1:
                 results[channel] = stacks[0].path

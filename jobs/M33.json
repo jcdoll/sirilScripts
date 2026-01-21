@@ -31,6 +31,11 @@
   },
   "output": "M33/processed",
   "options": {
-    "dark_temp_override": -10
+    "dark_temp_override": -10,
+    "color_removal_mode": "none",
+    "veralux_target_median": 0.10,
+    "veralux_b": 4.0,
+    "saturation_amount": 0.75,
+    "post_stack_subsky_degree": 1
   }
 }

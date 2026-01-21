@@ -20,7 +20,7 @@ DEFAULT_PROTECT_B = 6.0
 DEFAULT_TARGET_BG = 0.20
 REC709_WEIGHTS = (0.2126, 0.7152, 0.0722)
 RTU_PEDESTAL = 0.001
-RTU_SOFT_CEIL_PERCENTILE = 99.9
+RTU_SOFT_CEIL_PERCENTILE = 99.0
 
 
 def hyperbolic_stretch_value(
@@ -411,11 +411,13 @@ def apply_stretch(
         stretched[1] = lum_stretched * g_final
         stretched[2] = lum_stretched * b_final
 
-        # Note: No additional MTF/scaling needed - hyperbolic stretch with solve_log_d
-        # already achieves target_bg. Applying _adaptive_output_scaling here would
-        # double-process the background and cause washed-out colors.
+        # Step 8: Ready-to-Use mode - apply adaptive output scaling with MTF
+        # This matches the original VeraLux RTU mode which applies pedestal,
+        # contrast scaling, and MTF tone mapping to reach target background.
+        # Scientific mode would skip this step.
+        stretched = _adaptive_output_scaling(stretched, target_bg)
 
-        # Step 8: Apply soft-clip to each channel for highlight protection
+        # Step 9: Apply soft-clip to each channel for highlight protection
         stretched[0] = _soft_clip_channel(stretched[0])
         stretched[1] = _soft_clip_channel(stretched[1])
         stretched[2] = _soft_clip_channel(stretched[2])

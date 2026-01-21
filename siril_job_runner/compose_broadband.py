@@ -33,6 +33,8 @@ Key principles:
 - StarNet branch is optional and conditional on starnet_enabled config
 """
 
+import shutil
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -43,6 +45,17 @@ from .psf_analysis import analyze_psf, format_psf_stats
 
 if TYPE_CHECKING:
     from .protocols import SirilInterface
+
+
+def _link_or_copy(src: Path, dst: Path) -> None:
+    """Create symlink or copy file if symlinks unavailable (Windows without privileges)."""
+    if dst.exists() or dst.is_symlink():
+        dst.unlink()
+    if sys.platform == "win32":
+        # Windows symlinks require admin or developer mode; use copy instead
+        shutil.copy2(src, dst)
+    else:
+        dst.symlink_to(src)
 
 
 # Mapping from channel name to alphabetical index (for registered sequences)
@@ -305,11 +318,15 @@ def compose_lrgb(
     log_fn: callable,
     log_step_fn: callable,
     log_color_balance_fn: callable,
+    is_hdr: bool = False,
 ) -> CompositionResult:
     """
     Compose LRGB image from stacked channels.
 
     See module docstring for full workflow description.
+
+    Args:
+        is_hdr: If True, skip cross-registration (HDR stacks are pre-aligned)
     """
     log_step_fn("Composing LRGB")
 
@@ -323,25 +340,53 @@ def compose_lrgb(
             )
 
     cfg = config
-    siril.cd(str(stacks_dir))
 
     # =========================================================================
     # LINEAR PHASE
     # =========================================================================
 
-    # Step 1: Cross-register all stacks
-    log_fn("Cross-registering stacks...")
-    siril.convert("stack", out="./registered")
-    siril.cd(str(stacks_dir / "registered"))
-    siril.register("stack", twopass=True)
-    siril.seqapplyreg("stack", framing="min")
+    # Step 1: Create working directory with numbered symlinks for Siril's convert
+    # This handles both HDR (stack_00001.fit) and non-HDR (stack_B_180s.fit) naming
+    work_dir = stacks_dir / "work"
+    work_dir.mkdir(parents=True, exist_ok=True)
 
-    # Step 2: Save channels with standard names
-    log_fn("Saving registered channels...")
+    log_fn("Preparing stacks for registration...")
     for ch, idx in LRGB_CHANNEL_INDEX.items():
-        siril.load(f"r_stack_{idx}")
-        siril.save(ch)
-        log_fn(f"  {ch}: saved")
+        src_path = stacks[ch][0].path
+        link_path = work_dir / f"stack_{idx}.fit"
+        _link_or_copy(src_path, link_path)
+        log_fn(f"  {ch}: {src_path.name} -> stack_{idx}.fit")
+
+    siril.cd(str(work_dir))
+
+    if is_hdr:
+        # HDR stacks are pre-aligned from the same imaging session.
+        # Skip cross-registration to avoid issues with different star profiles
+        # between HDR-blended channels.
+        log_fn("HDR mode: skipping cross-registration (stacks pre-aligned)")
+        working_dir = work_dir
+        # Load stacks directly with channel names
+        for ch, idx in LRGB_CHANNEL_INDEX.items():
+            siril.load(f"stack_{idx}")
+            siril.save(ch)
+            log_fn(f"  {ch}: loaded")
+    else:
+        # Step 2: Cross-register all stacks
+        # Use L channel (image 3) as reference - highest SNR and most detected stars
+        log_fn("Cross-registering stacks...")
+        siril.convert("stack", out="./registered")
+        siril.cd(str(work_dir / "registered"))
+        siril.setref("stack", 3)  # L=00003 is image 3 in LRGB sequence (B=1, G=2, L=3, R=4)
+        siril.register("stack", twopass=True)
+        siril.seqapplyreg("stack", framing="min")
+        working_dir = work_dir / "registered"
+
+        # Step 3: Save channels with standard names
+        log_fn("Saving registered channels...")
+        for ch, idx in LRGB_CHANNEL_INDEX.items():
+            siril.load(f"r_stack_{idx}")
+            siril.save(ch)
+            log_fn(f"  {ch}: saved")
 
     # Post-stack background extraction (on registered channel stacks)
     if cfg.post_stack_subsky_method != "none":
@@ -410,7 +455,7 @@ def compose_lrgb(
             siril, "L", "L_deconv", cfg, output_dir, log_fn, "L"
         )
 
-    working_dir = stacks_dir / "registered"
+    # working_dir was set above based on is_hdr mode
 
     # =========================================================================
     # BRANCH 1: BASELINE WITH ORIGINAL STARS (always)
@@ -620,20 +665,34 @@ def compose_rgb(
             )
 
     cfg = config
-    siril.cd(str(stacks_dir))
 
     # =========================================================================
     # LINEAR PHASE
     # =========================================================================
 
-    # Step 1: Cross-register stacks
+    # Step 1: Create working directory with numbered symlinks for Siril's convert
+    work_dir = stacks_dir / "work"
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    log_fn("Preparing stacks for registration...")
+    for ch, idx in RGB_CHANNEL_INDEX.items():
+        src_path = stacks[ch][0].path
+        link_path = work_dir / f"stack_{idx}.fit"
+        _link_or_copy(src_path, link_path)
+        log_fn(f"  {ch}: {src_path.name} -> stack_{idx}.fit")
+
+    siril.cd(str(work_dir))
+
+    # Step 2: Cross-register stacks
+    # Use R channel (image 3) as reference - typically has better star profiles than B
     log_fn("Cross-registering stacks...")
     siril.convert("stack", out="./registered")
-    siril.cd(str(stacks_dir / "registered"))
+    siril.cd(str(work_dir / "registered"))
+    siril.setref("stack", 3)  # R=00003 is image 3 in RGB sequence (B=1, G=2, R=3)
     siril.register("stack", twopass=True)
     siril.seqapplyreg("stack", framing="min")
 
-    # Step 2: Save channels with standard names
+    # Step 3: Save channels with standard names
     log_fn("Saving registered channels...")
     for ch, idx in RGB_CHANNEL_INDEX.items():
         siril.load(f"r_stack_{idx}")
@@ -692,7 +751,7 @@ def compose_rgb(
             siril, "rgb_spcc", "rgb_deconv", cfg, output_dir, log_fn, "rgb"
         )
 
-    working_dir = stacks_dir / "registered"
+    working_dir = work_dir / "registered"
 
     # =========================================================================
     # BRANCH 1: BASELINE WITH ORIGINAL STARS (always)

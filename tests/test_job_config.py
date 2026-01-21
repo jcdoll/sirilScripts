@@ -148,7 +148,7 @@ def test_config_defaults():
     assert DEFAULTS.hdr_low_threshold == 0.7
     assert DEFAULTS.hdr_high_threshold == 0.9
     # Stretch defaults
-    assert DEFAULTS.stretch_method == "autostretch"
+    assert DEFAULTS.stretch_method == "veralux"
     assert DEFAULTS.stretch_compare is True
     assert DEFAULTS.autostretch_targetbg == 0.10
     assert DEFAULTS.veralux_target_median == 0.10

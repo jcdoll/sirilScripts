@@ -70,6 +70,8 @@
     "temp_tolerance": 2,
     "dark_temp_override": -10,
     "hdr_low_threshold": 0.7,
-    "hdr_high_threshold": 0.9
+    "hdr_high_threshold": 0.9,
+    "color_removal_mode": "green",
+    "saturation_amount": 1.0
   }
 }
