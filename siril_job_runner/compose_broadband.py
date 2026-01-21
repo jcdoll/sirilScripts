@@ -337,12 +337,33 @@ def compose_lrgb(
     siril.seqapplyreg("stack", framing="min")
 
     # Step 2: Save channels with standard names
-    # Background extraction was done pre-stack on individual subs
     log_fn("Saving registered channels...")
     for ch, idx in LRGB_CHANNEL_INDEX.items():
         siril.load(f"r_stack_{idx}")
         siril.save(ch)
         log_fn(f"  {ch}: saved")
+
+    # Post-stack background extraction (on registered channel stacks)
+    if cfg.post_stack_subsky_method != "none":
+        method_desc = (
+            "RBF"
+            if cfg.post_stack_subsky_method == "rbf"
+            else f"polynomial degree {cfg.post_stack_subsky_degree}"
+        )
+        log_fn(f"Post-stack background extraction ({method_desc})...")
+        for ch in ["R", "G", "B", "L"]:
+            siril.load(ch)
+            if siril.subsky(
+                rbf=(cfg.post_stack_subsky_method == "rbf"),
+                degree=cfg.post_stack_subsky_degree,
+                samples=cfg.post_stack_subsky_samples,
+                tolerance=cfg.post_stack_subsky_tolerance,
+                smooth=cfg.post_stack_subsky_smooth,
+            ):
+                siril.save(ch)
+                log_fn(f"  {ch}: background extracted")
+            else:
+                log_fn(f"  {ch}: subsky failed, using original")
 
     # Diagnostic previews for individual stacks
     if cfg.diagnostic_previews:
@@ -435,7 +456,11 @@ def compose_lrgb(
         # Step 6-7: Star removal on RGB and L (linear phase)
         log_fn("Removing stars from RGB (linear)...")
         siril.load(rgb_source)
-        if siril.starnet():
+        if siril.starnet(
+            stretch=cfg.starnet_stretch,
+            upscale=cfg.starnet_upscale,
+            stride=cfg.starnet_stride,
+        ):
             siril.save("rgb_starless")
             # StarNet creates starmask file
             stars_path = stacks_dir / "registered" / f"starmask_{rgb_source}.fit"
@@ -460,7 +485,11 @@ def compose_lrgb(
 
         log_fn("Removing stars from L (linear)...")
         siril.load(l_source)
-        if siril.starnet():
+        if siril.starnet(
+            stretch=cfg.starnet_stretch,
+            upscale=cfg.starnet_upscale,
+            stride=cfg.starnet_stride,
+        ):
             siril.save("L_starless")
             log_fn("  L starless saved")
         else:
@@ -605,12 +634,33 @@ def compose_rgb(
     siril.seqapplyreg("stack", framing="min")
 
     # Step 2: Save channels with standard names
-    # Background extraction was done pre-stack on individual subs
     log_fn("Saving registered channels...")
     for ch, idx in RGB_CHANNEL_INDEX.items():
         siril.load(f"r_stack_{idx}")
         siril.save(ch)
         log_fn(f"  {ch}: saved")
+
+    # Post-stack background extraction (on registered channel stacks)
+    if cfg.post_stack_subsky_method != "none":
+        method_desc = (
+            "RBF"
+            if cfg.post_stack_subsky_method == "rbf"
+            else f"polynomial degree {cfg.post_stack_subsky_degree}"
+        )
+        log_fn(f"Post-stack background extraction ({method_desc})...")
+        for ch in ["R", "G", "B"]:
+            siril.load(ch)
+            if siril.subsky(
+                rbf=(cfg.post_stack_subsky_method == "rbf"),
+                degree=cfg.post_stack_subsky_degree,
+                samples=cfg.post_stack_subsky_samples,
+                tolerance=cfg.post_stack_subsky_tolerance,
+                smooth=cfg.post_stack_subsky_smooth,
+            ):
+                siril.save(ch)
+                log_fn(f"  {ch}: background extracted")
+            else:
+                log_fn(f"  {ch}: subsky failed, using original")
 
     if cfg.diagnostic_previews:
         log_fn("Saving diagnostic previews...")
@@ -693,7 +743,11 @@ def compose_rgb(
         # Star removal
         log_fn("Removing stars from RGB (linear)...")
         siril.load(rgb_source)
-        if siril.starnet():
+        if siril.starnet(
+            stretch=cfg.starnet_stretch,
+            upscale=cfg.starnet_upscale,
+            stride=cfg.starnet_stride,
+        ):
             siril.save("rgb_starless")
             stars_path = stacks_dir / "registered" / f"starmask_{rgb_source}.fit"
             if stars_path.exists():

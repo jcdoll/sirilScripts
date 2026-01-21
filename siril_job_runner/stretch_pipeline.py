@@ -146,7 +146,12 @@ class StretchPipeline:
             self._log("Failed to load image for StarNet")
             return result
 
-        if not self.siril.starnet():
+        cfg = self.config
+        if not self.siril.starnet(
+            stretch=cfg.starnet_stretch,
+            upscale=cfg.starnet_upscale,
+            stride=cfg.starnet_stride,
+        ):
             self._log("StarNet failed, continuing with original image")
             return result
 

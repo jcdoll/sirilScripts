@@ -206,31 +206,6 @@ def run_pipeline(
     if not stack_path.exists():
         raise FileNotFoundError(f"Stack output not created: {stack_path}")
 
-    # Post-stack background extraction (subsky on stacked channel)
-    # Can clean up residual gradients that seqsubsky missed
-    if cfg.post_stack_subsky_method != "none":
-        method_desc = (
-            "RBF"
-            if cfg.post_stack_subsky_method == "rbf"
-            else f"polynomial degree {cfg.post_stack_subsky_degree}"
-        )
-        if log_fn:
-            log_fn(f"Background extraction (post-stack, {method_desc})...")
-        if not siril.load(str(stack_path)):
-            raise RuntimeError(f"Failed to load stack: {stack_path}")
-        if siril.subsky(
-            rbf=(cfg.post_stack_subsky_method == "rbf"),
-            degree=cfg.post_stack_subsky_degree,
-            samples=cfg.post_stack_subsky_samples,
-            tolerance=cfg.post_stack_subsky_tolerance,
-            smooth=cfg.post_stack_subsky_smooth,
-        ):
-            if not siril.save(str(stack_path)):
-                raise RuntimeError(f"Failed to save stack after subsky: {stack_path}")
-        else:
-            if log_fn:
-                log_fn("Post-stack background extraction failed, continuing without")
-
     if log_fn:
         log_fn(f"Complete -> {stack_path.name}")
     return stack_path

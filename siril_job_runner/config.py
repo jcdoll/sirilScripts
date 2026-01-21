@@ -46,7 +46,7 @@ class Config:
 
     # VeraLux HyperMetric Stretch parameters
     # Based on https://gitlab.com/free-astro/siril-scripts/-/blob/main/VeraLux/
-    veralux_target_median: float = 0.15  # Target background median after stretch
+    veralux_target_median: float = 0.10  # Target background median after stretch
     veralux_b: float = 6.0  # Highlight protection / curve knee (higher preserves stars)
     veralux_log_d_min: float = 0.0  # Min log_d for binary search (D = 10^log_d)
     veralux_log_d_max: float = 7.0  # Max log_d for binary search
@@ -78,9 +78,16 @@ class Config:
     veralux_silentium_shadow_smooth: float = 10.0  # Extra shadow smoothing 0-100
 
     # Star removal (Siril StarNet integration)
-    # When enabled, runs starnet after stretch to create starless + starmask
+    # When enabled, runs starnet on linear data to create starless + starmask
     # If starcomposer is also enabled, recomposes with controlled star intensity
     starnet_enabled: bool = False
+    starnet_stretch: bool = (
+        True  # Apply internal MTF stretch (required for linear input)
+    )
+    starnet_upscale: bool = False  # 2x upscale for small stars (4x slower)
+    starnet_stride: Optional[int] = (
+        None  # Tile stride (default 256, dev recommends not changing)
+    )
 
     # VeraLux StarComposer - Star compositing (requires starnet_enabled)
     # Recomposes stars onto starless image with hyperbolic stretch control

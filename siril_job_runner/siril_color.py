@@ -131,11 +131,27 @@ class SirilColorMixin:
 
     # Star removal
 
-    def starnet(self, stretch: bool = False) -> bool:
-        """Run StarNet for star removal."""
+    def starnet(
+        self,
+        stretch: bool = True,
+        upscale: bool = False,
+        stride: int | None = None,
+    ) -> bool:
+        """
+        Run StarNet for star removal.
+
+        Args:
+            stretch: Apply internal MTF stretch (required for linear input)
+            upscale: 2x upscale for small stars (4x slower, may hurt large stars)
+            stride: Tile stride (default 256, developer recommends not changing)
+        """
         cmd = "starnet"
         if stretch:
             cmd += " -stretch"
+        if upscale:
+            cmd += " -upscale"
+        if stride is not None:
+            cmd += f" -stride={stride}"
         return self.execute(cmd)
 
     # Pixel math
