@@ -15,6 +15,18 @@ except ImportError:
     jsonschema = None
 
 
+def _extract_target_from_lights(lights: dict[str, list[str]]) -> str:
+    """Extract target name from light paths (first path component)."""
+    for paths in lights.values():
+        if paths:
+            # Path like "SH2-157/2024_08_28/L180" -> "SH2-157"
+            first_path = paths[0]
+            parts = first_path.replace("\\", "/").split("/")
+            if parts:
+                return parts[0]
+    raise ValueError("Cannot determine target name from lights paths")
+
+
 @dataclass
 class JobConfig:
     """Parsed job configuration."""
@@ -51,14 +63,22 @@ class JobConfig:
         merged = merge_overrides(settings_options, job_options)
         config = with_overrides(merged)
 
+        # Auto-generate output path if not specified
+        job_type = data["type"]
+        if "output" in data:
+            output = data["output"]
+        else:
+            target = _extract_target_from_lights(lights)
+            output = f"{target}/processed_{job_type.lower()}"
+
         return cls(
             name=data["name"],
-            job_type=data["type"],
+            job_type=job_type,
             calibration_bias=data["calibration"]["bias"],
             calibration_darks=data["calibration"]["darks"],
             calibration_flats=data["calibration"]["flats"],
             lights=lights,
-            output=data["output"],
+            output=output,
             config=config,
         )
 

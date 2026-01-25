@@ -3,7 +3,7 @@
   "title": "Siril Job File",
   "description": "Configuration for a Siril image processing job",
   "type": "object",
-  "required": ["name", "type", "calibration", "lights", "output"],
+  "required": ["name", "type", "calibration", "lights"],
   "properties": {
     "name": {
       "type": "string",
@@ -12,7 +12,7 @@
     },
     "type": {
       "type": "string",
-      "enum": ["LRGB", "RGB", "SHO", "HOO"],
+      "enum": ["LRGB", "RGB", "SHO", "HOO", "LSHO", "LHOO"],
       "description": "Type of imaging data"
     },
     "calibration": {
