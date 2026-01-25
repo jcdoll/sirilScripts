@@ -61,7 +61,7 @@ STARNET OUTPUTS (if starnet_enabled)
 18. Color removal, neutralization, saturation, enhancements
 19. Save rgb_veralux_starless
 
-20. StarComposer (if enabled) -> rgb_*_starcomposer
+20. StarComposer -> rgb_*_starcomposer
 ```
 
 ### LRGB Flow
@@ -98,7 +98,7 @@ STARNET OUTPUTS (if starnet_enabled)
 22. Color removal, neutralization, saturation, enhancements
 23. Save lrgb_veralux_starless
 
-24. StarComposer (if enabled) -> lrgb_*_starcomposer
+24. StarComposer -> lrgb_*_starcomposer
 ```
 
 ### Broadband Output Files
@@ -177,7 +177,7 @@ Custom formulas can override any channel via `palette_r_override`, etc.
 | Color calibration | SPCC (photometric) | None (palette mapping) |
 | StarNet timing | After SPCC, before stretch | Before stretch |
 | StarNet input | RGB composite + L | Individual channels |
-| Star compositing | Optional (StarComposer) | Always (screen blend) |
+| Star compositing | Always (StarComposer) | Always (screen blend) |
 | Baseline outputs | Yes (with original stars) | No (always process stars) |
 | Channel balancing | None (SPCC handles it) | linear_match to H |
 
@@ -206,7 +206,6 @@ Key options affecting composition:
 | `starnet_enabled` | true | Enable star removal |
 | `stretch_compare` | true | Output both autostretch and veralux |
 | `stretch_method` | veralux | Stretch method if compare disabled |
-| `veralux_starcomposer_enabled` | false | Controlled star recomposition (broadband) |
 | `narrowband_star_source` | auto | Channel for star extraction (L or H) |
 | `narrowband_star_color` | mono | Star color mode (mono = white) |
 | `palette` | SHO | Narrowband palette selection |

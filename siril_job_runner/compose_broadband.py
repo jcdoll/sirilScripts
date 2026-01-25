@@ -94,37 +94,30 @@ def _add_stars_back(
     config: Config,
     log_fn: callable,
 ) -> None:
-    """Add stars back to starless image using screen blend or StarComposer."""
-    if config.veralux_starcomposer_enabled:
-        from .veralux_starcomposer import apply_starcomposer
+    """Add stars back to starless image using StarComposer (screen blend fallback)."""
+    from .veralux_starcomposer import apply_starcomposer
 
-        log_fn("Applying StarComposer for star recomposition...")
+    log_fn("Applying StarComposer for star recomposition...")
 
-        # Save files for starcomposer
-        starless_path = working_dir / f"{starless_name}.fit"
-        stars_path = working_dir / f"{stars_name}.fit"
-        siril.load(starless_name)
-        siril.save(str(starless_path))
+    # Save files for starcomposer
+    starless_path = working_dir / f"{starless_name}.fit"
+    stars_path = working_dir / f"{stars_name}.fit"
+    siril.load(starless_name)
+    siril.save(str(starless_path))
 
-        success, result_path = apply_starcomposer(
-            siril, starless_path, stars_path, config, log_fn
-        )
-        if not success:
-            log_fn("StarComposer failed, falling back to screen blend")
-            siril.load(starless_name)
-            siril.pm(f"1 - (1 - ${starless_name}$) * (1 - ${stars_name}$)")
-            siril.save(output_name)
-            return
-
-        # Load result and save with output name
-        siril.load(str(result_path))
-        siril.save(output_name)
-    else:
-        # Simple screen blend: result = 1 - (1 - starless) * (1 - stars)
-        log_fn("Adding stars back with screen blend...")
+    success, result_path = apply_starcomposer(
+        siril, starless_path, stars_path, config, log_fn
+    )
+    if not success:
+        log_fn("StarComposer failed, falling back to screen blend")
         siril.load(starless_name)
         siril.pm(f"1 - (1 - ${starless_name}$) * (1 - ${stars_name}$)")
         siril.save(output_name)
+        return
+
+    # Load result and save with output name
+    siril.load(str(result_path))
+    siril.save(output_name)
 
 
 def _stretch_and_combine_lrgb(
@@ -426,8 +419,8 @@ def compose_lrgb(
             stride=cfg.starnet_stride,
         ):
             siril.save("rgb_starless")
-            # StarNet creates starmask file
-            stars_path = stacks_dir / "registered" / f"starmask_{rgb_source}.fit"
+            # StarNet creates starmask file in current working directory
+            stars_path = working_dir / f"starmask_{rgb_source}.fit"
             if stars_path.exists():
                 siril.load(str(stars_path))
                 siril.save("rgb_stars")
@@ -501,45 +494,44 @@ def compose_lrgb(
             siril, lrgb_veralux_starless, output_dir, "lrgb_veralux_starless", log_fn
         )
 
-        # --- STARCOMPOSER OUTPUTS (if enabled) ---
-        if cfg.veralux_starcomposer_enabled:
-            log_fn("Creating STARCOMPOSER versions...")
+        # --- STARCOMPOSER OUTPUTS ---
+        log_fn("Creating STARCOMPOSER versions...")
 
-            # Autostretch starcomposer
-            _add_stars_back(
-                siril,
-                lrgb_auto_starless,
-                "rgb_stars_stretched",
-                "lrgb_autostretch_starcomposer",
-                working_dir,
-                cfg,
-                log_fn,
-            )
-            _save_outputs(
-                siril,
-                "lrgb_autostretch_starcomposer",
-                output_dir,
-                "lrgb_autostretch_starcomposer",
-                log_fn,
-            )
+        # Autostretch starcomposer
+        _add_stars_back(
+            siril,
+            lrgb_auto_starless,
+            "rgb_stars_stretched",
+            "lrgb_autostretch_starcomposer",
+            working_dir,
+            cfg,
+            log_fn,
+        )
+        _save_outputs(
+            siril,
+            "lrgb_autostretch_starcomposer",
+            output_dir,
+            "lrgb_autostretch_starcomposer",
+            log_fn,
+        )
 
-            # Veralux starcomposer
-            _add_stars_back(
-                siril,
-                lrgb_veralux_starless,
-                "rgb_stars_stretched",
-                "lrgb_veralux_starcomposer",
-                working_dir,
-                cfg,
-                log_fn,
-            )
-            _save_outputs(
-                siril,
-                "lrgb_veralux_starcomposer",
-                output_dir,
-                "lrgb_veralux_starcomposer",
-                log_fn,
-            )
+        # Veralux starcomposer
+        _add_stars_back(
+            siril,
+            lrgb_veralux_starless,
+            "rgb_stars_stretched",
+            "lrgb_veralux_starcomposer",
+            working_dir,
+            cfg,
+            log_fn,
+        )
+        _save_outputs(
+            siril,
+            "lrgb_veralux_starcomposer",
+            output_dir,
+            "lrgb_veralux_starcomposer",
+            log_fn,
+        )
     else:
         log_fn("StarNet disabled - skipping starless outputs")
 
@@ -754,7 +746,8 @@ def compose_rgb(
             stride=cfg.starnet_stride,
         ):
             siril.save("rgb_starless")
-            stars_path = stacks_dir / "registered" / f"starmask_{rgb_source}.fit"
+            # StarNet creates starmask file in current working directory
+            stars_path = working_dir / f"starmask_{rgb_source}.fit"
             if stars_path.exists():
                 siril.load(str(stars_path))
                 siril.save("rgb_stars")
@@ -835,41 +828,40 @@ def compose_rgb(
         )
 
         # --- STARCOMPOSER ---
-        if cfg.veralux_starcomposer_enabled:
-            log_fn("Creating STARCOMPOSER versions...")
-            _add_stars_back(
-                siril,
-                "rgb_auto_starless",
-                "rgb_stars_stretched",
-                "rgb_autostretch_starcomposer",
-                working_dir,
-                cfg,
-                log_fn,
-            )
-            _save_outputs(
-                siril,
-                "rgb_autostretch_starcomposer",
-                output_dir,
-                "rgb_autostretch_starcomposer",
-                log_fn,
-            )
+        log_fn("Creating STARCOMPOSER versions...")
+        _add_stars_back(
+            siril,
+            "rgb_auto_starless",
+            "rgb_stars_stretched",
+            "rgb_autostretch_starcomposer",
+            working_dir,
+            cfg,
+            log_fn,
+        )
+        _save_outputs(
+            siril,
+            "rgb_autostretch_starcomposer",
+            output_dir,
+            "rgb_autostretch_starcomposer",
+            log_fn,
+        )
 
-            _add_stars_back(
-                siril,
-                "rgb_veralux_starless",
-                "rgb_stars_stretched",
-                "rgb_veralux_starcomposer",
-                working_dir,
-                cfg,
-                log_fn,
-            )
-            _save_outputs(
-                siril,
-                "rgb_veralux_starcomposer",
-                output_dir,
-                "rgb_veralux_starcomposer",
-                log_fn,
-            )
+        _add_stars_back(
+            siril,
+            "rgb_veralux_starless",
+            "rgb_stars_stretched",
+            "rgb_veralux_starcomposer",
+            working_dir,
+            cfg,
+            log_fn,
+        )
+        _save_outputs(
+            siril,
+            "rgb_veralux_starcomposer",
+            output_dir,
+            "rgb_veralux_starcomposer",
+            log_fn,
+        )
     else:
         log_fn("StarNet disabled - skipping starless outputs")
 

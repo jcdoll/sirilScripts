@@ -40,7 +40,6 @@
     "veralux_revela_enabled": false,
     "veralux_vectra_enabled": false,
     "starnet_enabled": false,
-    "veralux_starcomposer_enabled": false,
     "diagnostic_previews": true,
     "post_stack_subsky_method": "poly",
     "post_stack_subsky_degree": 2

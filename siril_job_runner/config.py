@@ -91,7 +91,6 @@ class Config:
 
     # VeraLux StarComposer - Star compositing (requires starnet_enabled)
     # Recomposes stars onto starless image with hyperbolic stretch control
-    veralux_starcomposer_enabled: bool = False
     veralux_starcomposer_log_d: float = 1.0  # Star intensity 0-2
     veralux_starcomposer_hardness: float = 6.0  # Profile hardness 1-100
     veralux_starcomposer_color_grip: float = 0.5  # Vector vs scalar 0-1
