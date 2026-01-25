@@ -40,6 +40,7 @@ from .compose_helpers import (
     apply_color_removal,
     apply_deconvolution,
     apply_spcc_step,
+    neutralize_rgb_background,
     save_diagnostic_preview,
 )
 from .config import Config
@@ -182,6 +183,17 @@ def _stretch_and_combine_lrgb(
         siril.load(lrgb_combined)
         apply_color_removal(siril, config, log_fn)
         siril.save(lrgb_combined)
+
+    # Background color neutralization
+    if config.broadband_neutralization:
+        neutralize_rgb_background(
+            siril,
+            lrgb_combined,
+            config,
+            log_fn,
+            low=config.broadband_neutralization_low,
+            high=config.broadband_neutralization_high,
+        )
 
     # Apply saturation
     siril.load(lrgb_combined)
@@ -682,6 +694,15 @@ def compose_rgb(
         siril.load("rgb_auto")
         apply_color_removal(siril, cfg, log_fn)
         siril.save("rgb_auto")
+    if cfg.broadband_neutralization:
+        neutralize_rgb_background(
+            siril,
+            "rgb_auto",
+            cfg,
+            log_fn,
+            low=cfg.broadband_neutralization_low,
+            high=cfg.broadband_neutralization_high,
+        )
     siril.load("rgb_auto")
     apply_saturation(siril, cfg)
     siril.save("rgb_auto")
@@ -703,6 +724,15 @@ def compose_rgb(
         siril.load("rgb_veralux")
         apply_color_removal(siril, cfg, log_fn)
         siril.save("rgb_veralux")
+    if cfg.broadband_neutralization:
+        neutralize_rgb_background(
+            siril,
+            "rgb_veralux",
+            cfg,
+            log_fn,
+            low=cfg.broadband_neutralization_low,
+            high=cfg.broadband_neutralization_high,
+        )
     siril.load("rgb_veralux")
     apply_saturation(siril, cfg)
     siril.save("rgb_veralux")
@@ -754,6 +784,15 @@ def compose_rgb(
             siril.load("rgb_auto_starless")
             apply_color_removal(siril, cfg, log_fn)
             siril.save("rgb_auto_starless")
+        if cfg.broadband_neutralization:
+            neutralize_rgb_background(
+                siril,
+                "rgb_auto_starless",
+                cfg,
+                log_fn,
+                low=cfg.broadband_neutralization_low,
+                high=cfg.broadband_neutralization_high,
+            )
         siril.load("rgb_auto_starless")
         apply_saturation(siril, cfg)
         siril.save("rgb_auto_starless")
@@ -776,6 +815,15 @@ def compose_rgb(
             siril.load("rgb_veralux_starless")
             apply_color_removal(siril, cfg, log_fn)
             siril.save("rgb_veralux_starless")
+        if cfg.broadband_neutralization:
+            neutralize_rgb_background(
+                siril,
+                "rgb_veralux_starless",
+                cfg,
+                log_fn,
+                low=cfg.broadband_neutralization_low,
+                high=cfg.broadband_neutralization_high,
+            )
         siril.load("rgb_veralux_starless")
         apply_saturation(siril, cfg)
         siril.save("rgb_veralux_starless")

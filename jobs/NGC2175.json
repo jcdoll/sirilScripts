@@ -30,6 +30,9 @@
   "output": "NGC2175/processed",
   "options": {
     "dark_temp_override": -10,
-    "palette": "SHO"
+    "palette": "SHO",
+    "pre_stack_subsky_method": "none",
+    "post_stack_subsky_method": "none",
+    "narrowband_neutralization": false
   }
 }

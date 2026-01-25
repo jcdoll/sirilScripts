@@ -106,53 +106,49 @@ def neutralize_rgb_background(
     image_name: str,
     config: Config,
     log_fn: Callable[[str], None],
+    low: Optional[float] = None,
+    high: Optional[float] = None,
 ) -> bool:
     """
-    Neutralize RGB background after palette application.
+    Neutralize RGB background color by linear matching G,B to R.
 
-    For dynamic narrowband palettes with channel scaling, backgrounds may shift.
-    This applies subsky + linear_match to neutralize:
-    1. Extract background with subsky
-    2. Split RGB into separate channels
-    3. Linear match G and B to R (using narrowband_balance bounds)
-    4. Recombine channels
+    Removes color cast from background after stretch. Works for both broadband
+    and narrowband by using appropriate bounds for linear_match.
+
+    Note: This only handles COLOR neutralization, not gradient removal.
+    Use subsky separately for gradient extraction.
+
+    Steps:
+    1. Split RGB into separate channels
+    2. Linear match G and B to R (only background pixels via bounds)
+    3. Recombine channels
 
     Args:
         siril: Siril interface
-        image_name: Name of loaded RGB image to neutralize
-        config: Config with subsky and narrowband_balance settings
+        image_name: Name of RGB image to neutralize
+        config: Config (unused, kept for API compatibility)
         log_fn: Logging function
+        low: Low bound for linear_match (default: narrowband_balance_low)
+        high: High bound for linear_match (default: narrowband_balance_high)
 
     Returns:
         True if successful, False otherwise
     """
-    log_fn("Neutralizing RGB background...")
+    log_fn("Neutralizing RGB background color...")
 
-    # Step 1: Background extraction
-    siril.load(image_name)
-    if not siril.subsky(
-        rbf=(config.post_stack_subsky_method == "rbf"),
-        degree=config.post_stack_subsky_degree,
-        samples=config.post_stack_subsky_samples,
-        tolerance=config.post_stack_subsky_tolerance,
-        smooth=config.post_stack_subsky_smooth,
-    ):
-        log_fn("  subsky failed, skipping neutralization")
-        return False
-    siril.save(image_name)
-    log_fn("  subsky applied")
-
-    # Step 2: Split into R, G, B channels
+    # Step 1: Split into R, G, B channels
     siril.load(image_name)
     if not siril.split("_nb_r", "_nb_g", "_nb_b"):
         log_fn("  split failed, skipping neutralization")
         return False
     log_fn("  split into R, G, B channels")
 
-    # Step 3: Linear match G and B to R
-    # Use narrowband_balance bounds to match backgrounds only
-    low = config.narrowband_balance_low
-    high = config.narrowband_balance_high
+    # Step 2: Linear match G and B to R
+    # Use provided bounds, or fall back to narrowband defaults
+    if low is None:
+        low = config.narrowband_balance_low
+    if high is None:
+        high = config.narrowband_balance_high
     log_fn(f"  linear matching G, B to R (bounds: {low:.2f}-{high:.2f})")
 
     siril.load("_nb_g")

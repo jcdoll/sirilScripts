@@ -2,6 +2,9 @@
 Narrowband composition for SHO imaging.
 
 Handles composition of H, S, O filter stacks into palette-mapped images.
+
+Unified flow for all palette types:
+    register -> subsky -> balance -> stretch -> palette -> neutralize -> saturation -> save
 """
 
 from pathlib import Path
@@ -17,122 +20,13 @@ from .config import Config
 from .models import CompositionResult, StackInfo
 from .palettes import build_effective_palette, formula_to_pixelmath, get_palette
 from .siril_file_ops import link_or_copy
-from .stretch_helpers import (
-    apply_saturation,
-    apply_stretch,
-    stretch_and_finalize,
-)
+from .stretch_helpers import apply_saturation, apply_stretch, save_all_formats
 
 if TYPE_CHECKING:
     from .protocols import SirilInterface
 
 
-def _process_dynamic_palette(
-    siril: "SirilInterface",
-    cfg: Config,
-    palette,
-    has_luminance: bool,
-    narrowband_channels: list[str],
-    registered_dir: Path,
-    output_dir: Path,
-    type_name: str,
-    apply_palette_fn: Callable[[], None],
-    log_fn: Callable[[str], None],
-) -> dict[str, Path]:
-    """
-    Process dynamic palette: stretch per-channel, apply scale expressions, then palette.
-
-    Dynamic palettes require non-linear (stretched) data for their formulas to work
-    correctly. The workflow is:
-    1. Stretch each channel independently
-    2. Optionally separate stars (to allow aggressive nebula processing)
-    3. Apply channel scale expressions (e.g., O boost for bicolor)
-    4. Apply palette formulas to create RGB
-    5. Neutralize RGB background
-    6. Composite stars back (if separated)
-    7. Apply saturation and save
-
-    Returns dict with 'fit', 'tif', 'jpg' paths for the primary output.
-    """
-    methods = (
-        ["autostretch", "veralux"] if cfg.stretch_compare else [cfg.stretch_method]
-    )
-    primary_paths = None
-
-    # All channels to process (narrowband + L if present)
-    all_channels = list(narrowband_channels)
-    if has_luminance:
-        all_channels.append("L")
-
-    for method in methods:
-        suffix = f"_{method}" if cfg.stretch_compare else ""
-        log_fn(f"Dynamic palette: processing with {method} stretch...")
-
-        # Step 1: Stretch each channel independently
-        for ch in all_channels:
-            siril.load(f"{ch}_linear")
-            ch_path = registered_dir / f"{ch}_linear.fit"
-            apply_stretch(siril, method, ch_path, cfg, log_fn)
-            siril.save(ch)
-            log_fn(f"  {ch}: stretched ({method})")
-
-        # Step 2: Star separation (optional)
-        # Allows aggressive channel scaling on nebula without affecting star colors
-        star_source_ch = None
-        if cfg.narrowband_star_separation:
-            star_source_ch = _separate_stars(
-                siril, cfg, has_luminance, all_channels, registered_dir, log_fn
-            )
-
-        # Determine channel name prefix (starless_ if star separation enabled)
-        use_starless = cfg.narrowband_star_separation
-        ch_prefix = "starless_" if use_starless else ""
-
-        # Step 3: Apply channel scale expressions
-        # Non-linear scaling (e.g., O + k*O^3) to boost signal while preserving ratios
-        _apply_scale_expressions(siril, cfg, narrowband_channels, ch_prefix, log_fn)
-
-        # Step 4: Apply palette formulas
-        if use_starless:
-            # Copy starless channels to expected names for palette function
-            for ch in narrowband_channels:
-                siril.load(f"starless_{ch}")
-                siril.save(ch)
-            if has_luminance:
-                siril.load("starless_L")
-                siril.save("L")
-
-        apply_palette_fn()
-
-        # Step 5: Neutralize RGB background
-        if cfg.post_stack_subsky_method != "none":
-            neutralize_rgb_background(siril, "narrowband", cfg, log_fn)
-
-        # Step 6: Composite stars back (if separated)
-        if cfg.narrowband_star_separation and star_source_ch:
-            _composite_stars(siril, cfg, star_source_ch, log_fn)
-
-        # Step 7: Apply saturation and save outputs
-        siril.load("narrowband")
-        apply_saturation(siril, cfg)
-
-        base_name = f"{type_name}_auto{suffix}"
-        auto_fit = output_dir / f"{base_name}.fit"
-        auto_tif = output_dir / f"{base_name}.tif"
-        auto_jpg = output_dir / f"{base_name}.jpg"
-        siril.save(str(output_dir / base_name))
-        siril.load(str(auto_fit))
-        siril.savetif(str(output_dir / base_name))
-        siril.savejpg(str(output_dir / base_name), quality=90)
-        log_fn(f"  Saved: {auto_fit.name}, {auto_tif.name}, {auto_jpg.name}")
-
-        if primary_paths is None:
-            primary_paths = {"fit": auto_fit, "tif": auto_tif, "jpg": auto_jpg}
-
-    return primary_paths
-
-
-def _separate_stars(
+def _separate_stars_linear(
     siril: "SirilInterface",
     cfg: Config,
     has_luminance: bool,
@@ -141,12 +35,16 @@ def _separate_stars(
     log_fn: Callable[[str], None],
 ) -> str | None:
     """
-    Separate stars from all channels using StarNet.
+    Separate stars from all linear channels using StarNet.
+
+    Runs on {ch}_linear files with stretch=True (internal MTF stretch).
+    Creates {ch}_linear_starless for each channel and stars_source from the
+    designated star channel.
 
     Returns the channel name used as star source (for later compositing),
     or None if star separation failed.
     """
-    log_fn("  Star separation enabled, running StarNet...")
+    log_fn("  Star separation enabled, running StarNet on linear data...")
 
     # Determine star source: L if available, else H, or configured channel
     if cfg.narrowband_star_source == "auto":
@@ -154,13 +52,13 @@ def _separate_stars(
     else:
         star_source_ch = cfg.narrowband_star_source
 
-    # Run StarNet on all channels
+    # Run StarNet on all linear channels
     for ch in all_channels:
-        siril.load(ch)
-        if siril.starnet(stretch=False):  # Already stretched
-            siril.save(f"starless_{ch}")
+        siril.load(f"{ch}_linear")
+        if siril.starnet(stretch=True):  # Linear data, needs internal stretch
+            siril.save(f"{ch}_linear_starless")
             # StarNet creates starmask_<filename>.fit in the working directory
-            starmask_path = registered_dir / f"starmask_{ch}.fit"
+            starmask_path = registered_dir / f"starmask_{ch}_linear.fit"
             if starmask_path.exists() and ch == star_source_ch:
                 siril.load(str(starmask_path))
                 siril.save("stars_source")
@@ -169,8 +67,8 @@ def _separate_stars(
                 log_fn(f"    {ch}: starless saved")
         else:
             log_fn(f"    {ch}: StarNet failed, using original")
-            siril.load(ch)
-            siril.save(f"starless_{ch}")
+            siril.load(f"{ch}_linear")
+            siril.save(f"{ch}_linear_starless")
 
     return star_source_ch
 
@@ -187,7 +85,6 @@ def _apply_scale_expressions(
 
     Scale expressions allow non-linear channel manipulation (e.g., O + k*O^3)
     to boost signal in a way that survives linear background neutralization.
-    The non-linear component preserves ratio changes even after linear correction.
     """
     scale_exprs = {
         "H": cfg.palette_h_scale_expr,
@@ -208,21 +105,24 @@ def _apply_scale_expressions(
 def _composite_stars(
     siril: "SirilInterface",
     cfg: Config,
-    star_source_ch: str,
+    stars_image: str,
     log_fn: Callable[[str], None],
 ) -> None:
     """
     Composite stars back onto the processed narrowband image.
 
-    Stars are blended using max() for a simple additive-like effect that
-    preserves star brightness without over-brightening overlapping regions.
+    Stars are blended using screen blend (1 - (1-a)*(1-b)) which is the
+    mathematically correct way to add light sources without harsh clipping.
+
+    Args:
+        stars_image: Name of the stars image to composite (e.g. "stars_prepared")
     """
     log_fn("  Compositing stars back...")
     siril.load("narrowband")
     siril.save("narrowband_starless")
 
     # Prepare stars: mono (grayscale) creates white stars
-    siril.load("stars_source")
+    siril.load(stars_image)
     if cfg.narrowband_star_color == "mono":
         siril.save("_stars_mono")
         siril.rgbcomp(
@@ -231,16 +131,16 @@ def _composite_stars(
             b="_stars_mono",
             out="_stars_rgb",
         )
-        log_fn(f"    Using {star_source_ch} stars as grayscale (white)")
+        log_fn("    Using stars as grayscale (white)")
     else:
         siril.save("_stars_rgb")
-        log_fn(f"    Using {star_source_ch} stars with native color")
+        log_fn("    Using stars with native color")
 
-    # Blend using max() - simpler than screen blend, avoids over-brightening
+    # Screen blend: 1 - (1-a)*(1-b)
     siril.load("narrowband_starless")
-    siril.pm("max($narrowband_starless$, $_stars_rgb$)")
+    siril.pm("1-(1-$narrowband_starless$)*(1-$_stars_rgb$)")
     siril.save("narrowband")
-    log_fn("    Stars composited (max blend)")
+    log_fn("    Stars composited (screen blend)")
 
 
 def compose_narrowband(
@@ -267,6 +167,9 @@ def compose_narrowband(
     - SHO: S->R, H->G, O->B (direct)
     - SHO_FORAXX: S->R, 0.5*H+0.5*O->G, O->B (blended)
     - etc.
+
+    Unified flow for all palette types:
+        register -> subsky -> balance -> stretch -> palette -> neutralize -> saturation
     """
     # Determine if job uses luminance channel
     has_luminance = job_type.startswith("L")
@@ -296,7 +199,6 @@ def compose_narrowband(
             )
 
     # Build channel index mapping from sorted required channels
-    # This ensures we control the numbering explicitly (like broadband does)
     channels_sorted = sorted(required)
     channel_to_num = {ch: f"{i + 1:05d}" for i, ch in enumerate(channels_sorted)}
 
@@ -320,12 +222,9 @@ def compose_narrowband(
 
     cfg = config
     if cfg.cross_reg_twopass:
-        # 2-pass: Siril auto-selects best reference (ignores setref)
         log_fn("Using 2-pass registration (Siril auto-selects reference)")
         siril.register("stack", twopass=True)
     else:
-        # 1-pass: Use our preferred reference
-        # L if available (highest SNR), otherwise H (most stars for narrowband)
         ref_ch = "L" if has_luminance else "H"
         ref_idx = int(channel_to_num[ref_ch])
         siril.setref("stack", ref_idx)
@@ -336,17 +235,14 @@ def compose_narrowband(
 
     siril.seqapplyreg("stack", framing="min")
 
-    # Note: No linear matching for narrowband
-    # Linear matching destroys the relative intensities between channels
-    # which are needed for proper palette mapping. Each narrowband filter
-    # captures different emission lines with different intrinsic brightness.
-    log_fn("Saving registered channels (no linear match for narrowband)...")
+    # Save registered channels
+    log_fn("Saving registered channels...")
     for ch, idx in channel_to_num.items():
         siril.load(f"r_stack_{idx}")
         siril.save(ch)
         log_fn(f"  {ch}: saved")
 
-    # Post-stack background extraction (on registered channel stacks)
+    # Post-stack background extraction
     if cfg.post_stack_subsky_method != "none":
         method_desc = (
             "RBF"
@@ -369,12 +265,9 @@ def compose_narrowband(
                 log_fn(f"  {ch}: subsky failed, using original")
 
     # Narrowband channel balancing (linear_match to equalize backgrounds)
-    # Matches S and O to H (or configured reference) using low/high bounds
-    # to only affect background/mid-tones, preserving nebula emission ratios
     if cfg.narrowband_balance_enabled:
         ref_ch = cfg.narrowband_balance_reference
         if ref_ch in required:
-            # Channels to match: all required except reference and L (luminance)
             channels_to_match = [ch for ch in required if ch != ref_ch and ch != "L"]
             if channels_to_match:
                 log_fn(
@@ -404,61 +297,41 @@ def compose_narrowband(
         for ch in required:
             save_diagnostic_preview(siril, ch, output_dir, log_fn)
 
-    # ==========================================================================
-    # PALETTE APPLICATION
-    # Two workflows based on palette.dynamic flag:
-    #
-    # Static palette (dynamic=False):
-    #   Register -> Subsky -> Balance -> PALETTE -> Stretch(combined) -> Saturation
-    #   - Palette applied to linear data
-    #   - Final stretch on combined RGB
-    #
-    # Dynamic palette (dynamic=True):
-    #   Register -> Subsky -> Balance -> Stretch(per-ch) -> PALETTE -> Saturation
-    #   - Each channel stretched independently first
-    #   - Palette applied to non-linear data (required for dynamic formulas)
-    #   - No final stretch (already done per-channel)
-    # ==========================================================================
-
+    # Save linear channels for stretch comparison and reprocessing
     narrowband_channels = [ch for ch in required if ch != "L"]
+    all_channels = list(narrowband_channels)
+    if has_luminance:
+        all_channels.append("L")
     registered_dir = work_dir / "registered"
 
-    # For dynamic palettes, we need to handle compare mode specially
-    # Save linear channels first so we can re-stretch with different methods
-    if palette.dynamic:
-        log_fn("Dynamic palette: saving linear channels for stretch comparison...")
+    log_fn("Saving linear channels...")
+    for ch in all_channels:
+        siril.load(ch)
+        siril.save(f"{ch}_linear")
+
+    # LinearFit to weakest channel (optional, for dynamic palettes)
+    if cfg.palette_linearfit_to_weakest:
+        channel_max = {}
         for ch in narrowband_channels:
-            siril.load(ch)
-            siril.save(f"{ch}_linear")
+            ch_path = registered_dir / f"{ch}_linear.fit"
+            stats = siril.get_image_stats(ch_path)
+            channel_max[ch] = stats["max"]
+            log_fn(f"  {ch}: max={stats['max']:.4f}")
 
-        # LinearFit stronger channels to weakest in linear space
-        # This balances peak intensities so the dynamic formula can produce both blue and gold.
-        # Reference: https://thecoldestnights.com/2020/06/pixinsight-dynamic-narrowband-combinations-with-pixelmath/
-        # See also: https://jonrista.com/the-astrophotographers-guide/pixinsights/narrow-band-combinations-with-pixelmath-hoo/
-        if cfg.palette_linearfit_to_weakest:
-            # Measure signal strength (max value) for each channel to find weakest
-            channel_max = {}
-            for ch in narrowband_channels:
-                ch_path = registered_dir / f"{ch}_linear.fit"
-                stats = siril.get_image_stats(ch_path)
-                channel_max[ch] = stats["max"]
-                log_fn(f"  {ch}: max={stats['max']:.4f}")
+        ref_ch = min(channel_max, key=channel_max.get)
+        channels_to_fit = [ch for ch in narrowband_channels if ch != ref_ch]
 
-            # Weakest channel has lowest max signal
-            ref_ch = min(channel_max, key=channel_max.get)
-            channels_to_fit = [ch for ch in narrowband_channels if ch != ref_ch]
-
-            if channels_to_fit:
-                log_fn(
-                    f"LinearFit to weakest channel ({ref_ch}, max={channel_max[ref_ch]:.4f})..."
-                )
-                for ch in channels_to_fit:
-                    siril.load(f"{ch}_linear")
-                    if siril.linear_match(ref=f"{ref_ch}_linear"):
-                        siril.save(f"{ch}_linear")
-                        log_fn(f"  {ch}: fitted to {ref_ch}")
-                    else:
-                        log_fn(f"  {ch}: linear_match failed, using original")
+        if channels_to_fit:
+            log_fn(
+                f"LinearFit to weakest channel ({ref_ch}, max={channel_max[ref_ch]:.4f})..."
+            )
+            for ch in channels_to_fit:
+                siril.load(f"{ch}_linear")
+                if siril.linear_match(ref=f"{ref_ch}_linear"):
+                    siril.save(f"{ch}_linear")
+                    log_fn(f"  {ch}: fitted to {ref_ch}")
+                else:
+                    log_fn(f"  {ch}: linear_match failed, using original")
 
     # Helper to apply palette to current channels
     def apply_palette_combination():
@@ -483,11 +356,10 @@ def compose_narrowband(
             siril.load("narrowband_rgb")
             siril.save("narrowband")
 
-    # Map channels according to palette
+    # Log palette info
     log_fn(
         f"Applying {palette.name} palette: R={palette.r}, G={palette.g}, B={palette.b}"
     )
-
     if not palette.is_simple():
         r_pm = formula_to_pixelmath(palette.r)
         g_pm = formula_to_pixelmath(palette.g)
@@ -496,87 +368,121 @@ def compose_narrowband(
 
     type_name = job_type.lower()
 
-    if not palette.dynamic:
-        # Static palette: apply to linear data, stretch later
-        apply_palette_combination()
-        if has_luminance:
-            log_fn("Adding L channel as luminance...")
-
-        # Save linear result (only for static palettes - dynamic palettes are already stretched)
-        linear_path = output_dir / f"{type_name}_linear.fit"
-        siril.load("narrowband")
-        siril.save(str(linear_path))
-        log_fn(f"Saved linear: {linear_path.name}")
-        log_color_balance_fn(linear_path)
-
-        if cfg.diagnostic_previews:
-            save_diagnostic_preview(siril, "narrowband", output_dir, log_fn)
-
-        stretch_source = str(work_dir / "registered" / "narrowband.fit")
-    else:
-        # Dynamic palette: linear result not meaningful (channels will be stretched first)
-        # The actual processing happens in the final stretch section below
-        linear_path = output_dir / f"{type_name}_linear.fit"
-        # Save linear channels composed without stretch for reference
-        apply_palette_combination()
-        siril.load("narrowband")
-        siril.save(str(linear_path))
-        log_fn(f"Saved linear (pre-stretch reference): {linear_path.name}")
-        stretch_source = None  # Not used for dynamic palettes
-
-    # Note: PCC not applicable for narrowband - uses synthetic colors
-    linear_pcc_path = None
-    if cfg.color_removal_mode != "none":
-        siril.load("narrowband")
-        if apply_color_removal(siril, cfg, log_fn):
-            siril.save(str(linear_path))
-            stretch_source = str(linear_path)
-        else:
-            log_fn("Color removal failed, continuing without")
-
-    # Optional deconvolution on narrowband composite
+    # Optional deconvolution on linear channels
     if cfg.deconv_enabled:
-        log_fn("Deconvolving narrowband composite...")
-        deconv_result = apply_deconvolution(
-            siril, "narrowband", "narrowband_deconv", cfg, output_dir, log_fn, type_name
-        )
-        if deconv_result == "narrowband_deconv":
-            deconv_path = output_dir / f"{type_name}_deconv.fit"
-            siril.load("narrowband_deconv")
-            siril.save(str(deconv_path))
-            stretch_source = str(deconv_path)
-            log_fn(f"Saved deconvolved: {deconv_path.name}")
+        log_fn("Deconvolving linear channels...")
+        for ch in narrowband_channels:
+            deconv_result = apply_deconvolution(
+                siril,
+                f"{ch}_linear",
+                f"{ch}_linear_deconv",
+                cfg,
+                output_dir,
+                log_fn,
+                ch,
+            )
+            if deconv_result == f"{ch}_linear_deconv":
+                siril.load(f"{ch}_linear_deconv")
+                siril.save(f"{ch}_linear")
+                log_fn(f"  {ch}: deconvolved")
 
-    # Final stretch and output
-    if palette.dynamic:
-        auto_paths = _process_dynamic_palette(
-            siril=siril,
-            cfg=cfg,
-            palette=palette,
-            has_luminance=has_luminance,
-            narrowband_channels=narrowband_channels,
-            registered_dir=registered_dir,
-            output_dir=output_dir,
-            type_name=type_name,
-            apply_palette_fn=apply_palette_combination,
-            log_fn=log_fn,
+    # ==========================================================================
+    # STAR SEPARATION (on linear data, before stretch)
+    # ==========================================================================
+    star_source_ch = None
+    if cfg.starnet_enabled:
+        star_source_ch = _separate_stars_linear(
+            siril, cfg, has_luminance, all_channels, registered_dir, log_fn
         )
-    else:
-        # Static palette: stretch combined RGB now
-        auto_paths = stretch_and_finalize(
-            siril=siril,
-            input_path=Path(stretch_source),
-            output_dir=output_dir,
-            basename=f"{type_name}_auto",
-            config=cfg,
-            log_fn=log_fn,
-        )
+        # Save stars output
+        if star_source_ch:
+            siril.load("stars_source")
+            stars_name = f"{type_name}_stars"
+            save_all_formats(siril, output_dir, stars_name, log_fn)
+
+    # ==========================================================================
+    # UNIFIED PROCESSING LOOP
+    # For each stretch method: stretch -> palette -> neutralize -> saturation
+    # ==========================================================================
+    methods = (
+        ["autostretch", "veralux"] if cfg.stretch_compare else [cfg.stretch_method]
+    )
+    if cfg.stretch_compare:
+        log_fn("Comparing stretch methods (autostretch vs veralux)...")
+
+    primary_paths = None
+    linear_path = output_dir / f"{type_name}_linear.fit"
+
+    for method in methods:
+        suffix = f"_{method}" if cfg.stretch_compare else ""
+        log_fn(f"Processing with {method} stretch...")
+
+        # Step 1: Stretch each channel (use starless if available)
+        for ch in all_channels:
+            if cfg.starnet_enabled and star_source_ch:
+                siril.load(f"{ch}_linear_starless")
+                ch_path = registered_dir / f"{ch}_linear_starless.fit"
+            else:
+                siril.load(f"{ch}_linear")
+                ch_path = registered_dir / f"{ch}_linear.fit"
+            apply_stretch(siril, method, ch_path, cfg, log_fn)
+            siril.save(ch)
+            log_fn(f"  {ch}: stretched ({method})")
+
+        # Step 2: Apply channel scale expressions (no prefix needed now)
+        _apply_scale_expressions(siril, cfg, narrowband_channels, "", log_fn)
+
+        # Step 3: Apply palette formulas
+        apply_palette_combination()
+
+        # Save linear composite (first iteration only)
+        if primary_paths is None:
+            siril.load("narrowband")
+            siril.save(str(linear_path))
+            log_fn(f"Saved linear: {linear_path.name}")
+            log_color_balance_fn(linear_path)
+
+        # Step 4: Color removal (SCNR)
+        if cfg.color_removal_mode != "none":
+            siril.load("narrowband")
+            apply_color_removal(siril, cfg, log_fn)
+            siril.save("narrowband")
+
+        # Step 5: Neutralize RGB background
+        if cfg.narrowband_neutralization:
+            neutralize_rgb_background(siril, "narrowband", cfg, log_fn)
+
+        # Step 6: Save starless output (if star separation enabled)
+        if cfg.starnet_enabled and star_source_ch:
+            siril.load("narrowband")
+            starless_name = f"{type_name}_starless{suffix}"
+            save_all_formats(siril, output_dir, starless_name, log_fn)
+
+        # Step 7: Composite stars back (if separated)
+        if cfg.starnet_enabled and star_source_ch:
+            # Prepare stars: clip background noise
+            siril.load("stars_source")
+            siril.pm("max($stars_source$ - 0.001, 0)")
+            siril.save("stars_prepared")
+            _composite_stars(siril, cfg, "stars_prepared", log_fn)
+
+        # Step 8: Apply saturation
+        siril.load("narrowband")
+        apply_saturation(siril, cfg)
+
+        # Step 9: Save outputs
+        base_name = f"{type_name}_auto{suffix}"
+        siril.save(str(output_dir / base_name))
+        paths = save_all_formats(siril, output_dir, base_name, log_fn)
+
+        if primary_paths is None:
+            primary_paths = paths
 
     return CompositionResult(
         linear_path=linear_path,
-        linear_pcc_path=linear_pcc_path,
-        auto_fit=auto_paths["fit"],
-        auto_tif=auto_paths["tif"],
-        auto_jpg=auto_paths["jpg"],
+        linear_pcc_path=None,  # No PCC for narrowband
+        auto_fit=primary_paths["fit"],
+        auto_tif=primary_paths["tif"],
+        auto_jpg=primary_paths["jpg"],
         stacks_dir=stacks_dir,
     )

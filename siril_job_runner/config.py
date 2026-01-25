@@ -80,7 +80,7 @@ class Config:
     # Star removal (Siril StarNet integration)
     # When enabled, runs starnet on linear data to create starless + starmask
     # If starcomposer is also enabled, recomposes with controlled star intensity
-    starnet_enabled: bool = False
+    starnet_enabled: bool = True
     starnet_stretch: bool = (
         True  # Apply internal MTF stretch (required for linear input)
     )
@@ -96,6 +96,10 @@ class Config:
     veralux_starcomposer_hardness: float = 6.0  # Profile hardness 1-100
     veralux_starcomposer_color_grip: float = 0.5  # Vector vs scalar 0-1
     veralux_starcomposer_blend_mode: str = "screen"  # "screen" or "linear_add"
+
+    # Narrowband star options (used when starnet_enabled and narrowband job)
+    narrowband_star_source: str = "auto"  # "auto" (L if available, else H), or channel
+    narrowband_star_color: str = "mono"  # "mono" (white), "native" (channel color)
 
     # Saturation (runs after all stretch methods)
     saturation_amount: float = 0.25  # 1.0 = +100%, override in job as needed
@@ -151,6 +155,18 @@ class Config:
     post_stack_subsky_samples: int = 20
     post_stack_subsky_tolerance: float = 1.0
     post_stack_subsky_smooth: float = 0.5  # RBF smoothing (0-1, higher=smoother)
+
+    # Background color neutralization (after stretch)
+    # Removes color cast from background by linear matching G,B to R.
+    # Separate from gradient extraction (subsky) which only removes brightness gradients.
+    # Broadband disabled by default because SPCC handles color calibration.
+    # Narrowband enabled by default because no SPCC equivalent exists.
+    broadband_neutralization: bool = False
+    narrowband_neutralization: bool = True
+    # Bounds for linear_match - only pixels in this range are used for matching
+    # For stretched data, background is ~0.1, so use low bounds to target background only
+    broadband_neutralization_low: float = 0.0
+    broadband_neutralization_high: float = 0.25
 
     # Narrowband channel balancing (for SHO/HOO/LSHO/LHOO)
     # Equalizes background levels between channels without affecting nebula signal.
@@ -259,17 +275,6 @@ class Config:
     # Reference: https://thecoldestnights.com/2020/06/pixinsight-dynamic-narrowband-combinations-with-pixelmath/
     # See also: https://jonrista.com/the-astrophotographers-guide/pixinsights/narrow-band-combinations-with-pixelmath-hoo/
     palette_linearfit_to_weakest: bool = False
-
-    # Star separation for narrowband (requires StarNet)
-    # Separates stars before palette processing, allowing aggressive gamma on nebula
-    # without affecting star colors. Stars are composited back at the end.
-    narrowband_star_separation: bool = False
-    narrowband_star_source: str = (
-        "auto"  # "auto" (L if available, else H), or specific channel
-    )
-    narrowband_star_color: str = (
-        "mono"  # "mono" (white/grayscale), "native" (keep channel color)
-    )
 
     dark_temp_override: Optional[float] = None
     force_reprocess: bool = False  # Force re-stacking even if cached
