@@ -152,13 +152,21 @@ PROCESSING LOOP (for each stretch method)
 
 ### Narrowband Palettes
 
-| Palette | R | G | B |
-|---------|---|---|---|
-| HOO | H | O | O |
-| SHO | S | H | O |
-| SHO_FORAXX | S | 0.5*H + 0.5*O | O |
+| Palette | R | G | B | Notes |
+|---------|---|---|---|-------|
+| HOO | H | O | O | Standard HOO mapping |
+| SHO | S | H | O | Hubble palette |
+| SHO_FORAXX | S | 0.5*H + 0.5*O | O | Foraxx blend |
+| SHO_DYNAMIC | 0.8*S + 0.2*H | 0.7*H + 0.15*S + 0.15*O | 0.8*O + 0.2*H | Dynamic mix |
+| SHO_GOLD | 0.8*H + 0.2*S | 0.5*H + 0.5*O | O | Warm gold tones |
+| SHO_WARM | 0.75*S + 0.25*H | H | O | Warm palette |
+| SHO_BLUEGOLD | 0.8*H + 0.2*S | 0.7*O + 0.3*H | O | Blue-gold bicolor |
+| SHO_FORAXX_DYNAMIC | Dynamic | Dynamic | O | Per-pixel adaptive |
+| HOO_FORAXX_DYNAMIC | H | Dynamic | O | Per-pixel adaptive |
 
-Custom formulas can override any channel via `palette_r_override`, etc.
+Custom formulas can override any channel via `palette_r_override`, `palette_g_override`, `palette_b_override`.
+
+Channel scale expressions can be applied before palette formulas via `palette_h_scale_expr`, `palette_o_scale_expr`, `palette_s_scale_expr`.
 
 ### Narrowband Output Files
 
@@ -185,21 +193,76 @@ Custom formulas can override any channel via `palette_r_override`, etc.
 
 StarNet runs on LINEAR data with internal MTF stretch (`stretch=True`).
 
-**Broadband:**
+Broadband:
 - StarNet runs on RGB composite and L channel separately
 - Stars extracted from RGB
 - Baseline outputs preserve original stars (no StarNet artifacts)
 - Starless outputs use processed channels
 
-**Narrowband:**
+Narrowband:
 - StarNet runs on each channel independently (H, O, S, L)
 - Stars extracted from L (if available) or H
 - All outputs go through star separation/recomposition
 - Stars composited with screen blend: `1 - (1-starless)*(1-stars)`
 
-## Configuration Reference
+## VeraLux Processing
 
-Key options affecting composition:
+The VeraLux system provides advanced image processing capabilities beyond Siril's built-in autostretch.
+
+### VeraLux Stretch
+
+HyperMetric stretch with target background median. Uses binary search to find optimal D parameter for the hyperbolic transfer function. Provides more control over highlight preservation than autostretch.
+
+Key parameters:
+- `veralux_target_median`: Target background brightness (default: 0.10)
+- `veralux_b`: Highlight protection / curve knee (default: 6.0)
+
+### VeraLux Silentium (Noise Suppression)
+
+Wavelet-based noise reduction using SWT (Stationary Wavelet Transform). Operates in luminance and chrominance channels independently.
+
+Key parameters:
+- `veralux_silentium_enabled`: Enable noise suppression (default: false)
+- `veralux_silentium_intensity`: Luminance noise reduction 0-100 (default: 25.0)
+- `veralux_silentium_chroma`: Chrominance noise reduction 0-100 (default: 30.0)
+
+### VeraLux Revela (Detail Enhancement)
+
+Wavelet-based detail enhancement using ATWT (A Trous Wavelet Transform). Boosts fine detail (texture) and medium-scale structure independently.
+
+Key parameters:
+- `veralux_revela_enabled`: Enable detail enhancement (default: false)
+- `veralux_revela_texture`: Fine detail boost 0-100 (default: 50.0)
+- `veralux_revela_structure`: Medium structure boost 0-100 (default: 50.0)
+
+### VeraLux Vectra (Smart Saturation)
+
+Saturation enhancement in LCH color space with per-vector control. Allows independent saturation adjustment for different hue ranges.
+
+Key parameters:
+- `veralux_vectra_enabled`: Enable smart saturation (default: false)
+- `veralux_vectra_saturation`: Global saturation boost 0-100 (default: 25.0)
+- `veralux_vectra_red/yellow/green/cyan/blue/magenta`: Per-vector overrides
+
+### VeraLux StarComposer (Star Recomposition)
+
+Controlled star recomposition onto starless images. Uses hyperbolic stretch to control star intensity and profile.
+
+Key parameters:
+- `veralux_starcomposer_log_d`: Star intensity 0-2 (default: 1.0)
+- `veralux_starcomposer_hardness`: Profile hardness 1-100 (default: 6.0)
+- `veralux_starcomposer_blend_mode`: "screen" or "linear_add" (default: "screen")
+
+## Configuration System
+
+All configurable values are defined in `siril_job_runner/config.py` in a single `Config` dataclass. Users can override any value via:
+
+1. `settings.json` in the repository root (user defaults)
+2. `options` field in job JSON files (per-job overrides)
+
+Override precedence: `DEFAULTS <- settings.json <- job.json options`
+
+### Key Configuration Options
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -211,3 +274,10 @@ Key options affecting composition:
 | `palette` | SHO | Narrowband palette selection |
 | `spcc_enabled` | true | Spectrophotometric color calibration |
 | `deconv_enabled` | false | Richardson-Lucy deconvolution |
+| `temp_tolerance` | 2.0 | Temperature matching tolerance (Celsius) |
+| `pre_stack_subsky_method` | rbf | Pre-stack background extraction method |
+| `post_stack_subsky_method` | poly | Post-stack background extraction method |
+| `broadband_neutralization` | false | Background color neutralization for broadband |
+| `narrowband_neutralization` | true | Background color neutralization for narrowband |
+
+See `siril_job_runner/config.py` for the complete list of options.

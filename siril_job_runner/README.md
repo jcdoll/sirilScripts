@@ -9,23 +9,34 @@ Automated Siril image processing pipeline with JSON job file configuration.
 - Temperature tolerance matching for darks/bias
 - Multi-night light frame support
 - Automatic master calibration building and caching
-- Support for LRGB, SHO, and HOO workflows
-- HDR support: separate stacking by exposure for manual blending
+- Support for LRGB, RGB, SHO, HOO, LSHO, and LHOO workflows
+- HDR support: automatic brightness-weighted blending of multiple exposures
+- VeraLux stretch and enhancement (Silentium, Revela, Vectra, StarComposer)
+- StarNet integration for star removal and recomposition
 
 ## Usage
 
 ```bash
 # Validate a job file (check calibration availability)
-uv run python run_job.py examples/example_lrgb_job.json --validate
+uv run python run_job.py jobs/M42.json --validate
 
 # Dry run (show what would happen)
-uv run python run_job.py examples/example_lrgb_job.json --dry-run
+uv run python run_job.py jobs/M42.json --dry-run
 
 # Run full pipeline
 uv run python run_job.py jobs/M42.json
 
+# Run with logging to file
+uv run python run_job.py jobs/M42.json --log
+
+# Force reprocessing (ignore cached stacks)
+uv run python run_job.py jobs/M42.json --force
+
 # Run specific stage
 uv run python run_job.py jobs/M42.json --stage preprocess
+
+# View registration stats from previous run
+uv run python run_job.py jobs/M42.json --seq-stats
 ```
 
 ### sirilpy (Siril Integration)
@@ -36,10 +47,10 @@ sirilpy is required for actual processing but is not available on PyPI. It comes
 
 Install local catalogs for faster processing and offline capability.
 
-In Siril GUI: **Scripts > Python Scripts > Core > Siril_Catalog_Installer**
+In Siril GUI: Scripts > Python Scripts > Core > Siril_Catalog_Installer
 
-1. **Astrometry Catalog** (~1.5GB): Select "Astrometry Catalog", click Install
-2. **SPCC Catalog** (~5-10GB): Select "SPCC Catalog", enter latitude/longitude, select "Visible from latitude", click Install
+1. Astrometry Catalog (~1.5GB): Select "Astrometry Catalog", click Install
+2. SPCC Catalog (~5-10GB): Select "SPCC Catalog", enter latitude/longitude, select "Visible from latitude", click Install
 
 Bend, Oregon: Latitude 44.06, Longitude -121.32
 
@@ -83,7 +94,7 @@ E:\Astro\RC51_ASI2600\
     └── M42_Jan2024.json
 ```
 
-**Key conventions:**
+Key conventions:
 - Dates use underscores: `2024_01_15`
 - Light folders: `{filter}{exposure}` (e.g., `L180`, `R60`)
 - Bias: No temperature (readout noise is temperature-independent)
@@ -109,7 +120,6 @@ E:\Astro\RC51_ASI2600\
   },
   "output": "M42/processed",
   "options": {
-    "fwhm_filter": 1.8,
     "temp_tolerance": 2
   }
 }
@@ -117,7 +127,7 @@ E:\Astro\RC51_ASI2600\
 
 ### HDR Workflow
 
-For bright objects requiring multiple exposures:
+For bright objects requiring multiple exposures, include folders with different exposure times:
 
 ```json
 {
@@ -128,10 +138,27 @@ For bright objects requiring multiple exposures:
 }
 ```
 
-This produces separate stacks per exposure:
-- `stacks/stack_L_180s.fit`
-- `stacks/stack_L_30s.fit`
+The system will:
+1. Stack each exposure separately (`stack_L_180s.fit`, `stack_L_30s.fit`)
+2. Cross-register all stacks
+3. Blend using brightness-weighted HDR before composition
 
-Auto-composition is skipped; blend manually in PixInsight or other HDR tools.
+See `examples/example_lrgb_hdr_job.json` for a complete HDR example.
+
+### Settings File
+
+Create a `settings.json` file (copy from `settings.template.json`) to set defaults:
+
+```json
+{
+  "base_path": "/path/to/your/astro/data",
+  "options": {
+    "spcc_enabled": true,
+    "spcc_sensor": "Sony IMX411/455/461/533/571"
+  }
+}
+```
+
+Settings are merged with job options (job options take precedence).
 
 See `examples/` for more job file examples.

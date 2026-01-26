@@ -13,9 +13,8 @@
   },
   "output": "NGC7000/processed",
   "options": {
-    "fwhm_filter": 2.0,
     "temp_tolerance": 2,
     "denoise": false,
-    "palette": "SHO_blue_gold"
+    "palette": "SHO_BLUEGOLD"
   }
 }

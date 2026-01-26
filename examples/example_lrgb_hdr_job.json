@@ -18,7 +18,6 @@
   },
   "output": "M42/processed",
   "options": {
-    "fwhm_filter": 1.8,
     "temp_tolerance": 2
   }
 }

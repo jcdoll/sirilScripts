@@ -12,8 +12,7 @@
   },
   "output": "IC1805/processed",
   "options": {
-    "fwhm_filter": 1.8,
     "temp_tolerance": 2,
-    "palette": "HOO_natural"
+    "palette": "HOO"
   }
 }

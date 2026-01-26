@@ -67,11 +67,6 @@
       "type": "object",
       "description": "Optional processing parameters. Any Config field can be overridden here.",
       "properties": {
-        "fwhm_filter": {
-          "type": "number",
-          "minimum": 0,
-          "description": "FWHM filter factor for frame rejection (default: 1.8)"
-        },
         "temp_tolerance": {
           "type": "number",
           "minimum": 0,
@@ -83,8 +78,8 @@
         },
         "palette": {
           "type": "string",
-          "enum": ["HOO", "SHO"],
-          "description": "Narrowband palette for SHO/HOO types (default: HOO)"
+          "enum": ["HOO", "SHO", "SHO_FORAXX", "SHO_DYNAMIC", "SHO_GOLD", "SHO_WARM", "SHO_BLUEGOLD", "SHO_FORAXX_DYNAMIC", "HOO_FORAXX_DYNAMIC"],
+          "description": "Narrowband palette for SHO/HOO types (default: SHO)"
         },
         "dark_temp_override": {
           "type": "number",

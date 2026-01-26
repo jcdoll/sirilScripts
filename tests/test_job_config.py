@@ -17,9 +17,9 @@ def valid_job_dict():
         "name": "TestJob",
         "type": "LRGB",
         "calibration": {
-            "bias": "2024-01-15",
-            "darks": "2024-01-15",
-            "flats": "2024-01-20",
+            "bias": "2024_01_15",
+            "darks": "2024_01_15",
+            "flats": "2024_01_20",
         },
         "lights": {
             "L": ["M42/L"],
@@ -47,9 +47,9 @@ def test_job_config_from_dict(valid_job_dict):
 
     assert config.name == "TestJob"
     assert config.job_type == "LRGB"
-    assert config.calibration_bias == "2024-01-15"
-    assert config.calibration_darks == "2024-01-15"
-    assert config.calibration_flats == "2024-01-20"
+    assert config.calibration_bias == "2024_01_15"
+    assert config.calibration_darks == "2024_01_15"
+    assert config.calibration_flats == "2024_01_20"
     assert config.output == "M42/processed"
 
 
