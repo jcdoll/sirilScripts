@@ -2,6 +2,55 @@
 
 High-level overview of the Siril Job Runner codebase.
 
+## Repository Layout
+
+```
+sirilScripts/
+├── docs/
+│   ├── architecture.md      # Processing workflow documentation
+│   └── code.md              # This file - code structure overview
+├── examples/
+│   ├── example_lrgb_job.json
+│   ├── example_lrgb_hdr_job.json
+│   ├── example_sho_job.json
+│   └── example_hoo_job.json
+├── jobs/                     # User job files
+├── logs/                     # Processing logs
+├── siril_job_runner/
+│   ├── __init__.py
+│   ├── calibration.py        # Calibration master building
+│   ├── calibration_paths.py  # Path resolution
+│   ├── compose_broadband.py  # LRGB/RGB composition
+│   ├── compose_narrowband.py # SHO/HOO composition
+│   ├── composition.py        # Composition orchestration
+│   ├── config.py             # Centralized configuration
+│   ├── fits_utils.py         # FITS header parsing
+│   ├── hdr.py                # HDR blending
+│   ├── job_config.py         # Job file loading
+│   ├── job_runner.py         # Pipeline orchestration
+│   ├── job_schema.json       # Job file schema
+│   ├── job_validation.py     # Job validation
+│   ├── logger.py             # Logging utilities
+│   ├── models.py             # Shared data models
+│   ├── palettes.py           # Narrowband palettes
+│   ├── preprocessing.py      # Frame preprocessing
+│   ├── preprocessing_pipeline.py
+│   ├── preprocessing_utils.py
+│   ├── protocols.py          # Interface protocols
+│   ├── sequence_*.py         # Sequence file parsing/analysis
+│   ├── siril_*.py            # Siril operation wrappers
+│   ├── veralux_*.py          # VeraLux processing modules
+│   └── README.md             # Module documentation
+├── tests/
+│   ├── conftest.py
+│   └── test_*.py
+├── xisf_to_fits/             # XISF converter (separate tool)
+├── run_job.py                # CLI entry point
+├── settings.template.json    # Settings template
+├── pyproject.toml
+└── README.md
+```
+
 ## Module Organization
 
 ```
