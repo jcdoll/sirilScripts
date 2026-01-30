@@ -34,7 +34,12 @@ from .config import Config
 from .models import CompositionResult, StackInfo
 from .palettes import build_effective_palette, formula_to_pixelmath, get_palette
 from .siril_file_ops import link_or_copy
-from .stretch_helpers import apply_saturation, apply_stretch, save_all_formats
+from .stretch_helpers import (
+    apply_enhancements,
+    apply_saturation,
+    apply_stretch,
+    save_all_formats,
+)
 
 if TYPE_CHECKING:
     from .protocols import SirilInterface
@@ -474,7 +479,7 @@ def compose_narrowband(
         if cfg.starnet_enabled and star_source_ch:
             siril.load("narrowband")
             starless_name = f"{type_name}_starless{suffix}"
-            save_all_formats(siril, output_dir, starless_name, log_fn)
+            save_all_formats(siril, output_dir, starless_name, log_fn, cfg)
 
         # Step 7: Composite stars back (if separated)
         if cfg.starnet_enabled and star_source_ch:
@@ -488,10 +493,14 @@ def compose_narrowband(
         siril.load("narrowband")
         apply_saturation(siril, cfg)
 
-        # Step 9: Save outputs
+        # Step 9: Apply enhancements (Silentium/Revela/Vectra) if enabled
         base_name = f"{type_name}_auto{suffix}"
         siril.save(str(output_dir / base_name))
-        paths = save_all_formats(siril, output_dir, base_name, log_fn)
+        image_path = output_dir / f"{base_name}.fit"
+        apply_enhancements(siril, image_path, cfg, log_fn)
+
+        # Step 10: Save outputs
+        paths = save_all_formats(siril, output_dir, base_name, log_fn, cfg)
 
         if primary_paths is None:
             primary_paths = paths

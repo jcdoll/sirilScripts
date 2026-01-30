@@ -125,6 +125,7 @@ def save_all_formats(
     output_dir: Path,
     basename: str,
     log_fn: Callable[[str], None],
+    config: Optional[Config] = None,
 ) -> dict[str, Path]:
     """
     Save currently loaded image in FIT, TIF, and JPG formats.
@@ -134,10 +135,14 @@ def save_all_formats(
         output_dir: Directory to save files
         basename: Base filename (without extension)
         log_fn: Logging function
+        config: Optional config for output_suffix
 
     Returns:
         Dict with 'fit', 'tif', 'jpg' paths
     """
+    if config and config.output_suffix:
+        basename = f"{basename}_{config.output_suffix}"
+
     fit_path = output_dir / f"{basename}.fit"
     tif_path = output_dir / f"{basename}.tif"
     jpg_path = output_dir / f"{basename}.jpg"
@@ -195,7 +200,7 @@ def finalize_image(
         siril.save(str(output_dir / basename))
 
     # Save all formats
-    return save_all_formats(siril, output_dir, basename, log_fn)
+    return save_all_formats(siril, output_dir, basename, log_fn, config)
 
 
 def stretch_and_finalize(

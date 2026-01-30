@@ -278,6 +278,10 @@ class Config:
     dark_temp_override: Optional[float] = None
     force_reprocess: bool = False  # Force re-stacking even if cached
 
+    # Output filename suffix (appended to all output basenames)
+    # Useful for comparing different processing runs in the same output folder
+    output_suffix: Optional[str] = None
+
     # Color calibration (SPCC)
     # Use spcc_list command in Siril to see available sensors/filters
     # Note: SPCC only applies to broadband LRGB, not narrowband SHO

@@ -193,9 +193,8 @@ def _stretch_and_combine_lrgb(
     apply_saturation(siril, config)
     siril.save(lrgb_combined)
 
-    # Apply veralux post-processing (Silentium/Revela/Vectra) for veralux branch
-    if use_veralux:
-        _apply_veralux_processing(siril, lrgb_combined, working_dir, config, log_fn)
+    # Apply post-processing enhancements (Silentium/Revela/Vectra) if enabled
+    _apply_veralux_processing(siril, lrgb_combined, working_dir, config, log_fn)
 
     return lrgb_combined
 
@@ -206,10 +205,11 @@ def _save_outputs(
     output_dir: Path,
     output_basename: str,
     log_fn: callable,
+    config: Config,
 ) -> None:
     """Save FIT, TIF, and JPG outputs."""
     siril.load(source_name)
-    save_all_formats(siril, output_dir, output_basename, log_fn)
+    save_all_formats(siril, output_dir, output_basename, log_fn, config)
 
 
 def compose_lrgb(
@@ -387,7 +387,7 @@ def compose_lrgb(
         log_fn,
         use_veralux=False,
     )
-    _save_outputs(siril, lrgb_auto, output_dir, "lrgb_autostretch", log_fn)
+    _save_outputs(siril, lrgb_auto, output_dir, "lrgb_autostretch", log_fn, cfg)
 
     # --- VERALUX VERSION ---
     log_fn("Creating VERALUX version (original stars)...")
@@ -402,7 +402,7 @@ def compose_lrgb(
         log_fn,
         use_veralux=True,
     )
-    _save_outputs(siril, lrgb_veralux, output_dir, "lrgb_veralux", log_fn)
+    _save_outputs(siril, lrgb_veralux, output_dir, "lrgb_veralux", log_fn, cfg)
 
     # =========================================================================
     # BRANCH 2: STARNET OUTPUTS (conditional on starnet_enabled)
@@ -474,7 +474,12 @@ def compose_lrgb(
             use_veralux=False,
         )
         _save_outputs(
-            siril, lrgb_auto_starless, output_dir, "lrgb_autostretch_starless", log_fn
+            siril,
+            lrgb_auto_starless,
+            output_dir,
+            "lrgb_autostretch_starless",
+            log_fn,
+            cfg,
         )
 
         # --- VERALUX STARLESS ---
@@ -491,7 +496,12 @@ def compose_lrgb(
             use_veralux=True,
         )
         _save_outputs(
-            siril, lrgb_veralux_starless, output_dir, "lrgb_veralux_starless", log_fn
+            siril,
+            lrgb_veralux_starless,
+            output_dir,
+            "lrgb_veralux_starless",
+            log_fn,
+            cfg,
         )
 
         # --- STARCOMPOSER OUTPUTS ---
@@ -513,6 +523,7 @@ def compose_lrgb(
             output_dir,
             "lrgb_autostretch_starcomposer",
             log_fn,
+            cfg,
         )
 
         # Veralux starcomposer
@@ -531,6 +542,7 @@ def compose_lrgb(
             output_dir,
             "lrgb_veralux_starcomposer",
             log_fn,
+            cfg,
         )
     else:
         log_fn("StarNet disabled - skipping starless outputs")
@@ -698,7 +710,8 @@ def compose_rgb(
     siril.load("rgb_auto")
     apply_saturation(siril, cfg)
     siril.save("rgb_auto")
-    _save_outputs(siril, "rgb_auto", output_dir, "rgb_autostretch", log_fn)
+    _apply_veralux_processing(siril, "rgb_auto", working_dir, cfg, log_fn)
+    _save_outputs(siril, "rgb_auto", output_dir, "rgb_autostretch", log_fn, cfg)
 
     # --- VERALUX VERSION ---
     log_fn("Creating VERALUX version (original stars)...")
@@ -729,7 +742,7 @@ def compose_rgb(
     apply_saturation(siril, cfg)
     siril.save("rgb_veralux")
     _apply_veralux_processing(siril, "rgb_veralux", working_dir, cfg, log_fn)
-    _save_outputs(siril, "rgb_veralux", output_dir, "rgb_veralux", log_fn)
+    _save_outputs(siril, "rgb_veralux", output_dir, "rgb_veralux", log_fn, cfg)
 
     # =========================================================================
     # BRANCH 2: STARNET OUTPUTS (conditional on starnet_enabled)
@@ -790,7 +803,12 @@ def compose_rgb(
         apply_saturation(siril, cfg)
         siril.save("rgb_auto_starless")
         _save_outputs(
-            siril, "rgb_auto_starless", output_dir, "rgb_autostretch_starless", log_fn
+            siril,
+            "rgb_auto_starless",
+            output_dir,
+            "rgb_autostretch_starless",
+            log_fn,
+            cfg,
         )
 
         # --- VERALUX STARLESS ---
@@ -824,7 +842,12 @@ def compose_rgb(
             siril, "rgb_veralux_starless", working_dir, cfg, log_fn
         )
         _save_outputs(
-            siril, "rgb_veralux_starless", output_dir, "rgb_veralux_starless", log_fn
+            siril,
+            "rgb_veralux_starless",
+            output_dir,
+            "rgb_veralux_starless",
+            log_fn,
+            cfg,
         )
 
         # --- STARCOMPOSER ---
@@ -844,6 +867,7 @@ def compose_rgb(
             output_dir,
             "rgb_autostretch_starcomposer",
             log_fn,
+            cfg,
         )
 
         _add_stars_back(
@@ -861,6 +885,7 @@ def compose_rgb(
             output_dir,
             "rgb_veralux_starcomposer",
             log_fn,
+            cfg,
         )
     else:
         log_fn("StarNet disabled - skipping starless outputs")

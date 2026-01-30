@@ -1,5 +1,5 @@
 {
-  "name": "M31_Fall2024",
+  "name": "M31_Fall2024_Stage1",
   "type": "LRGB",
   "calibration": {
     "bias": "2024_08_05",
@@ -32,15 +32,17 @@
     "saturation_amount": 0.25,
     "dark_temp_override": -10,
     "stretch_method": "veralux",
-    "deconv_enabled": false,
     "color_removal_mode": "green",
     "spcc_enabled": true,
-    "veralux_silentium_enabled": false,
-    "veralux_revela_enabled": false,
-    "veralux_vectra_enabled": false,
     "starnet_enabled": false,
     "diagnostic_previews": true,
     "post_stack_subsky_method": "poly",
-    "post_stack_subsky_degree": 2
+    "post_stack_subsky_degree": 2,
+    "deconv_enabled": true,
+    "deconv_save_psf": true,
+    "veralux_silentium_enabled": false,
+    "veralux_revela_enabled": false,
+    "veralux_vectra_enabled": false,
+    "output_suffix": "deconv"
   }
 }
