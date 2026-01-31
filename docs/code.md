@@ -5,7 +5,7 @@ Orientation guide for the Siril Job Runner codebase.
 ## Repository Layout
 
 ```
-sirilScripts/
+autoSiril/
 ├── docs/                     # Documentation
 ├── examples/                 # Example job files
 ├── jobs/                     # User job files

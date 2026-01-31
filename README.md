@@ -44,8 +44,8 @@ See [xisf_to_fits/README.md](xisf_to_fits/README.md) for full documentation.
 Requires [uv](https://docs.astral.sh/uv/) for dependency management.
 
 ```bash
-git clone https://github.com/yourusername/sirilScripts.git
-cd sirilScripts
+git clone https://github.com/yourusername/autoSiril.git
+cd autoSiril
 uv sync
 ```
 
