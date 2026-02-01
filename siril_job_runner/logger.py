@@ -56,6 +56,15 @@ class JobLogger:
         """Log info message."""
         self._output(message)
 
+    def log_config(self, config) -> None:
+        """Log all configuration settings."""
+        from dataclasses import fields
+
+        self._output("Configuration:")
+        for field in fields(config):
+            value = getattr(config, field.name)
+            self._output(f"  {field.name}: {value}", indent=1)
+
     def step(self, message: str) -> None:
         """Log a major step."""
         self._output(message)

@@ -26,6 +26,8 @@ def save_diagnostic_preview(
     output_path = output_dir / f"diag_{name}.jpg"
     siril.savejpg(str(output_path.with_suffix("")), 90)
     log_fn(f"Diagnostic preview: {output_path.name}")
+    # Reload original unstretched data so subsequent operations work on linear data
+    siril.load(name)
 
 
 def apply_color_removal(

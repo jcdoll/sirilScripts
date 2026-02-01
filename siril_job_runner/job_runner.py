@@ -184,6 +184,7 @@ class JobRunner:
         """Run the full pipeline."""
         self.logger.info(f"Starting job: {self.config.name}")
         self.logger.info(f"Type: {self.config.job_type}")
+        self.logger.log_config(self.config.config)
 
         # Stage 0: Validation
         validation = self.validate()
