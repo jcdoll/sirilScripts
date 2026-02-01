@@ -30,7 +30,6 @@
     "saturation_amount": 0.25,
     "stretch_compare": true,
     "deconv_enabled": false,
-    "color_removal_mode": "green",
     "spcc_enabled": true,
     "veralux_silentium_enabled": false,
     "veralux_revela_enabled": false,

@@ -1,0 +1,13 @@
+{
+  "base_path": "E:\\Astro\\RC51_ASI2600",
+
+  "spcc_enabled": true,
+  "spcc_sensor": "Sony IMX411/455/461/533/571",
+  "spcc_red_filter": "Optolong Red",
+  "spcc_green_filter": "Optolong Green",
+  "spcc_blue_filter": "Optolong Blue",
+  "spcc_whiteref": "Average Spiral Galaxy",
+  "spcc_bgtol_upper": 2.0,
+  "spcc_bgtol_lower": 2.8,
+  "spcc_obsheight": 1000
+}

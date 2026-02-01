@@ -533,8 +533,13 @@ def _adaptive_output_scaling(
             current_bg * (2.0 * target_bg - 1.0) - target_bg
         )
         if is_rgb:
+            # Linked MTF: apply to luminance, scale channels proportionally
+            # This preserves color ratios (matches reference documentation "Linked MTF")
+            L_before = r_weight * result[0] + g_weight * result[1] + b_weight * result[2]
+            L_after = _apply_mtf(L_before, m)
+            scale = L_after / (L_before + 1e-9)
             for i in range(3):
-                result[i] = _apply_mtf(result[i], m)
+                result[i] = result[i] * scale
         else:
             result = _apply_mtf(result, m)
 
