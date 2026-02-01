@@ -589,6 +589,8 @@ def apply_stretch(
     convergence_power = getattr(
         config, "veralux_convergence_power", DEFAULT_CONVERGENCE_POWER
     )
+    color_grip = getattr(config, "veralux_color_grip", 1.0)
+    shadow_convergence = getattr(config, "veralux_shadow_convergence", 0.0)
 
     # Get sensor profile weights
     sensor_profile = getattr(config, "veralux_sensor_profile", "rec709")
@@ -679,6 +681,29 @@ def apply_stretch(
         stretched[0] = lum_stretched * r_final
         stretched[1] = lum_stretched * g_final
         stretched[2] = lum_stretched * b_final
+
+        # Step 8b: Hybrid mode (reference lines 1135-1152)
+        # Blends linked stretch with per-channel scalar stretch
+        needs_hybrid = (color_grip < 1.0) or (shadow_convergence > 0.01)
+        if needs_hybrid:
+            log(f"Hybrid mode: grip={color_grip}, shadow_conv={shadow_convergence}")
+            # Compute per-channel scalar stretch
+            scalar = np.zeros_like(stretched)
+            scalar[0] = _hyperbolic_stretch_array(img_anchored[0], D, protect_b)
+            scalar[1] = _hyperbolic_stretch_array(img_anchored[1], D, protect_b)
+            scalar[2] = _hyperbolic_stretch_array(img_anchored[2], D, protect_b)
+            scalar = np.clip(scalar, 0.0, 1.0)
+
+            # Build grip map
+            grip_map = np.full_like(lum_stretched, color_grip)
+
+            # Apply shadow convergence damping
+            if shadow_convergence > 0.01:
+                damping = np.power(lum_stretched, shadow_convergence)
+                grip_map = grip_map * damping
+
+            # Blend: stretched = linked * grip + scalar * (1 - grip)
+            stretched = (stretched * grip_map) + (scalar * (1.0 - grip_map))
 
         # Step 9: Apply pedestal (reference line 1156)
         stretched = stretched * (1.0 - 0.005) + 0.005

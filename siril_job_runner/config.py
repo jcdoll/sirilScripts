@@ -52,6 +52,9 @@ class Config:
     veralux_log_d_max: float = 7.0  # Max log_d for binary search
     # Sensor profile for luminance weights (rec709, imx571, imx455, imx533, imx585, hoo, sho)
     veralux_sensor_profile: str = "imx571"
+    # Hybrid mode parameters (RTU defaults: grip=1.0, shadow=0.0 means no hybrid)
+    veralux_color_grip: float = 1.0  # Vector vs scalar blend 0.4-1.0 (1.0=pure vector)
+    veralux_shadow_convergence: float = 0.0  # Shadow damping 0-3 (0=off)
 
     # VeraLux Revela - Detail enhancement (ATWT wavelets)
     veralux_revela_enabled: bool = True
