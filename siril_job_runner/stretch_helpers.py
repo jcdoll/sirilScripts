@@ -41,11 +41,22 @@ def apply_stretch(
     if method == "autostretch":
         mode = "linked" if cfg.autostretch_linked else "unlinked"
         log_fn(f"Stretching ({method}, {mode}, targetbg={cfg.autostretch_targetbg})...")
-        return siril.autostretch(
+        success = siril.autostretch(
             linked=cfg.autostretch_linked,
             shadowclip=cfg.autostretch_shadowclip,
             targetbg=cfg.autostretch_targetbg,
         )
+        if success:
+            log_fn(
+                f"  MTF: low={cfg.autostretch_mtf_low}, "
+                f"mid={cfg.autostretch_mtf_mid}, high={cfg.autostretch_mtf_high}"
+            )
+            siril.mtf(
+                cfg.autostretch_mtf_low,
+                cfg.autostretch_mtf_mid,
+                cfg.autostretch_mtf_high,
+            )
+        return success
     elif method == "veralux":
         log_fn(
             f"Stretching ({method}, target_median={cfg.veralux_target_median}, "

@@ -29,18 +29,21 @@
     ]
   },
   "options": {
-    "saturation_amount": 0,
+    "saturation_amount": 0.15,
     "dark_temp_override": -10,
     "stretch_method": "veralux",
-    "stretch_compare": false,
-    "deconv_enabled": false,
+    "stretch_compare": true,
+    "deconv_enabled": true,
     "spcc_enabled": true,
-    "veralux_silentium_enabled": false,
-    "veralux_revela_enabled": false,
-    "veralux_vectra_enabled": false,
+    "veralux_silentium_enabled": true,
+    "veralux_revela_enabled": true,
+    "veralux_vectra_enabled": true,
     "starnet_enabled": false,
     "diagnostic_previews": true,
     "post_stack_subsky_method": "poly",
-    "post_stack_subsky_degree": 2
+    "post_stack_subsky_degree": 2,
+    "autostretch_mtf_low": 0.0,
+    "autostretch_mtf_mid": 0.6,
+    "autostretch_mtf_high": 1.0
   }
 }

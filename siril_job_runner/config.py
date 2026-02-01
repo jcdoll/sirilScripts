@@ -42,7 +42,13 @@ class Config:
     # Autostretch parameters
     autostretch_linked: bool = True  # False for narrowband
     autostretch_shadowclip: float = -2.8  # Shadows clipping in sigma from peak
-    autostretch_targetbg: float = 0.10  # Target background brightness (lower=darker)
+    autostretch_targetbg: float = 0.05  # Target background brightness (lower=darker)
+    # MTF fine-tuning (applied after autostretch)
+    autostretch_mtf_low: float = 0.2  # Black point [0-1]
+    autostretch_mtf_mid: float = (
+        0.5  # Midtone [0-1], higher = darker/compress highlights
+    )
+    autostretch_mtf_high: float = 1.0  # White point [0-1]
 
     # VeraLux HyperMetric Stretch parameters
     # Based on https://gitlab.com/free-astro/siril-scripts/-/blob/main/VeraLux/
