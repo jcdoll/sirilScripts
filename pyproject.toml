@@ -13,6 +13,7 @@ dependencies = [
     "astropy>=6.0",
     "diptest>=0.8",
     "numpy>=1.24",
+    "pysiril @ git+https://gitlab.com/free-astro/pysiril.git",
     "PyWavelets>=1.4",
     "scikit-learn>=1.4",
     "scipy>=1.10",
