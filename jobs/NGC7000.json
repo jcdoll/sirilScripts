@@ -23,7 +23,6 @@
       "NGC7000/2024_09_03/H300"
     ]
   },
-  "output": "NGC7000/processed",
   "options": {
     "dark_temp_override": -10
   }

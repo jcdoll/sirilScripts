@@ -31,7 +31,6 @@
       "IC2118/2024_12_02/B180"
     ]
   },
-  "output": "IC2118/processed",
   "options": {
     "dark_temp_override": -10,
     "deconv_enabled": true

@@ -29,7 +29,6 @@
       "M33/2024_12_02/B180"
     ]
   },
-  "output": "M33/processed",
   "options": {
     "dark_temp_override": -10,
     "veralux_target_median": 0.10,

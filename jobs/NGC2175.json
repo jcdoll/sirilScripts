@@ -27,7 +27,6 @@
       "NGC2175/2025_01_28/O180"
     ]
   },
-  "output": "NGC2175/processed",
   "options": {
     "dark_temp_override": -10,
     "palette": "SHO",

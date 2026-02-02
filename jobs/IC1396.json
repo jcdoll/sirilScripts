@@ -20,9 +20,9 @@
       "IC1396/2024_09_24/L300"
     ]
   },
-  "output": "IC1396/processed",
   "options": {
     "dark_temp_override": -10,
-    "palette": "SHO"
+    "palette": "SHO",
+    "autostretch_targetbg": 0.05
   }
 }

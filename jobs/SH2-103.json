@@ -23,7 +23,6 @@
       "SH2-103/2024_09_29/O300"
     ]
   },
-  "output": "SH2-103/processed",
   "options": {
     "dark_temp_override": -10,
     "palette": "HOO"

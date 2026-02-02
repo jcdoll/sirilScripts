@@ -65,7 +65,6 @@
       "M42/2025_01_29/B180"
     ]
   },
-  "output": "M42/processed",
   "options": {
     "temp_tolerance": 2,
     "dark_temp_override": -10,

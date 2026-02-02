@@ -24,7 +24,6 @@
       "M45/2025_01_18/B180"
     ]
   },
-  "output": "M45/processed",
   "options": {
     "dark_temp_override": -10,
     "saturation_amount": 0.25,
