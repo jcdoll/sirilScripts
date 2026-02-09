@@ -8,7 +8,66 @@ Override precedence: DEFAULTS <- settings.json <- job.json options
 """
 
 from dataclasses import dataclass, fields, replace
+from enum import StrEnum
 from typing import Optional
+
+
+class StretchMethod(StrEnum):
+    AUTOSTRETCH = "autostretch"
+    VERALUX = "veralux"
+
+
+class ColorRemovalMode(StrEnum):
+    NONE = "none"
+    GREEN = "green"
+    MAGENTA = "magenta"
+
+
+class SubskyMethod(StrEnum):
+    NONE = "none"
+    RBF = "rbf"
+    POLY = "poly"
+
+
+class StarColor(StrEnum):
+    MONO = "mono"
+    NATIVE = "native"
+
+
+class BlendMode(StrEnum):
+    SCREEN = "screen"
+    LINEAR_ADD = "linear_add"
+
+
+class PSFMethod(StrEnum):
+    STARS = "stars"
+    BLIND = "blind"
+
+
+class Regularization(StrEnum):
+    TV = "tv"
+    FH = "fh"
+
+
+class Channel(StrEnum):
+    L = "L"
+    R = "R"
+    G = "G"
+    B = "B"
+    H = "H"
+    S = "S"
+    O = "O"  # noqa: E741 - standard OIII filter name
+
+
+class StarSource(StrEnum):
+    AUTO = "auto"
+    L = "L"
+    R = "R"
+    G = "G"
+    B = "B"
+    H = "H"
+    S = "S"
+    O = "O"  # noqa: E741 - standard OIII filter name
 
 
 @dataclass
@@ -33,8 +92,7 @@ class Config:
     # Fallback values
     default_temperature: float = 0.0  # Used when temperature not in FITS header
 
-    # Stretch method: "autostretch" or "veralux"
-    stretch_method: str = "veralux"
+    stretch_method: StretchMethod = StretchMethod.VERALUX
 
     # Compare stretch methods (saves both autostretch and veralux for comparison)
     stretch_compare: bool = True
@@ -106,11 +164,11 @@ class Config:
     veralux_starcomposer_hardness: float = 6.0  # Profile hardness 1-100
     veralux_starcomposer_color_grip: float = 0.5  # Vector vs scalar 0-1
     veralux_starcomposer_shadow_conv: float = 0.0  # Shadow convergence 0-3
-    veralux_starcomposer_blend_mode: str = "screen"  # "screen" or "linear_add"
+    veralux_starcomposer_blend_mode: BlendMode = BlendMode.SCREEN
 
     # Narrowband star options (used when starnet_enabled and narrowband job)
-    narrowband_star_source: str = "auto"  # "auto" (L if available, else H), or channel
-    narrowband_star_color: str = "mono"  # "mono" (white), "native" (channel color)
+    narrowband_star_source: StarSource = StarSource.AUTO
+    narrowband_star_color: StarColor = StarColor.MONO
 
     # Saturation (runs after all stretch methods)
     saturation_amount: float = 0.25  # 1.0 = +100%, override in job as needed
@@ -125,9 +183,7 @@ class Config:
     temp_tolerance: float = 2.0
     linear_match_low: float = 0.0
     linear_match_high: float = 0.92
-    linear_match_reference: str = (
-        "R"  # Reference channel for linear matching: "R", "G", or "B"
-    )
+    linear_match_reference: Channel = Channel.R  # Reference for linear matching
     # Diagnostic outputs (for debugging color issues)
     diagnostic_previews: bool = (
         True  # Save stretched previews of individual stacks and RGB
@@ -152,7 +208,7 @@ class Config:
     # Applied before registration/stacking. RBF handles complex gradients,
     # poly degree 1 handles simple linear gradients.
     # Disable for narrowband (H/O/S) which has inherently low sky background.
-    pre_stack_subsky_method: str = "rbf"  # "none", "rbf", "poly"
+    pre_stack_subsky_method: SubskyMethod = SubskyMethod.RBF
     pre_stack_subsky_degree: int = 1  # Polynomial degree if method="poly"
     pre_stack_subsky_samples: int = 20
     pre_stack_subsky_tolerance: float = 1.0
@@ -161,7 +217,7 @@ class Config:
     # Background extraction - Post-stack (subsky on each channel stack)
     # Applied after cross-registration, before RGB composition. Can clean up
     # residual gradients that seqsubsky missed due to stacking combining gradients.
-    post_stack_subsky_method: str = "poly"  # "none", "rbf", "poly"
+    post_stack_subsky_method: SubskyMethod = SubskyMethod.POLY
     post_stack_subsky_degree: int = 2  # Polynomial degree if method="poly"
     post_stack_subsky_samples: int = 20
     post_stack_subsky_tolerance: float = 1.0
@@ -184,9 +240,7 @@ class Config:
     # Workflow: subsky each channel, then linear_match S and O to H.
     # Uses low high bounds to only match background/mid-tones, preserving emission ratios.
     narrowband_balance_enabled: bool = True
-    narrowband_balance_reference: str = (
-        "H"  # Match other channels to this (typically H)
-    )
+    narrowband_balance_reference: Channel = Channel.H  # Match other channels to this
     narrowband_balance_low: float = 0.0  # Ignore pixels below this (clip artifacts)
     narrowband_balance_high: float = (
         0.20  # Ignore pixels above this (stretched bg ~0.10)
@@ -198,21 +252,17 @@ class Config:
     # Docs: https://siril.readthedocs.io/en/stable/processing/deconvolution.html
     # Tips: https://siril.readthedocs.io/en/stable/processing/deconvolution.html#deconvolution-usage-tips
     deconv_enabled: bool = True
-    deconv_psf_method: str = (
-        "stars"  # "stars" (from detected stars) or "blind" (estimate)
-    )
+    deconv_psf_method: PSFMethod = PSFMethod.STARS
     deconv_save_psf: bool = True  # Save PSF images for inspection
     deconv_iterations: int = 10
-    deconv_regularization: str = (
-        "tv"  # "tv" (Total Variation) or "fh" (Frobenius Hessian)
-    )
+    deconv_regularization: Regularization = Regularization.TV
     deconv_alpha: float = 3000.0  # Regularization strength (Siril default: 3000)
 
     # Color cast removal (SCNR - Subtractive Chromatic Noise Reduction)
     # Applied after color calibration, before stretch
     # For green cast: use rmgreen directly
     # For magenta cast: use negative-rmgreen-negative technique
-    color_removal_mode: str = "none"  # "none", "green", "magenta"
+    color_removal_mode: ColorRemovalMode = ColorRemovalMode.NONE
     rmgreen_type: int = (
         0  # 0=average neutral, 1=maximum neutral, 2=max mask, 3=additive
     )
@@ -324,7 +374,8 @@ def with_overrides(overrides: dict) -> Config:
     Create a Config with overrides applied.
 
     Validates that all override keys are valid option names.
-    Raises ValueError for unknown options.
+    Coerces string values to StrEnum types for enum-typed fields.
+    Raises ValueError for unknown options or invalid enum values.
     """
     if not overrides:
         return DEFAULTS
@@ -334,7 +385,21 @@ def with_overrides(overrides: dict) -> Config:
     if invalid:
         raise ValueError(f"Unknown config options: {sorted(invalid)}")
 
-    return replace(DEFAULTS, **overrides)
+    # Coerce string values to StrEnum types where applicable
+    type_hints = {f.name: f.type for f in fields(Config)}
+    coerced = {}
+    for key, value in overrides.items():
+        field_type = type_hints.get(key)
+        if (
+            isinstance(value, str)
+            and isinstance(field_type, type)
+            and issubclass(field_type, StrEnum)
+        ):
+            coerced[key] = field_type(value)
+        else:
+            coerced[key] = value
+
+    return replace(DEFAULTS, **coerced)
 
 
 def merge_overrides(*override_dicts: dict) -> dict:

@@ -3,7 +3,7 @@ name = "siril-job-runner"
 version = "0.1.0"
 description = "Automated Siril image processing pipeline with job file configuration"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [
     { name = "jcdoll" }

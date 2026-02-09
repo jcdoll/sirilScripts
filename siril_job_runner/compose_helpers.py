@@ -7,7 +7,7 @@ Color removal and other utilities used by broadband and narrowband composition.
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
 
-from .config import Config
+from .config import ColorRemovalMode, Config
 from .psf_analysis import analyze_psf, format_psf_stats
 
 if TYPE_CHECKING:
@@ -36,17 +36,17 @@ def apply_color_removal(
     log_fn: Callable[[str], None],
 ) -> bool:
     """Apply color cast removal based on config mode."""
-    if config.color_removal_mode == "none":
+    if config.color_removal_mode == ColorRemovalMode.NONE:
         return True
 
-    if config.color_removal_mode == "green":
+    if config.color_removal_mode == ColorRemovalMode.GREEN:
         log_fn("Removing green cast (SCNR)...")
         return siril.rmgreen(
             type=config.rmgreen_type,
             amount=config.rmgreen_amount,
             preserve_lightness=config.rmgreen_preserve_lightness,
         )
-    elif config.color_removal_mode == "magenta":
+    elif config.color_removal_mode == ColorRemovalMode.MAGENTA:
         log_fn("Removing magenta cast (negative-SCNR-negative)...")
         if not siril.negative():
             return False

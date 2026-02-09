@@ -34,7 +34,7 @@ Key principles:
 """
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from .compose_helpers import (
     apply_color_removal,
@@ -43,7 +43,7 @@ from .compose_helpers import (
     neutralize_rgb_background,
     save_diagnostic_preview,
 )
-from .config import Config
+from .config import ColorRemovalMode, Config, SubskyMethod
 from .models import CompositionResult, StackInfo
 from .siril_file_ops import link_or_copy
 from .stretch_helpers import (
@@ -69,7 +69,7 @@ def _apply_post_stretch(
     image_name: str,
     working_dir: Path,
     config: Config,
-    log_fn: callable,
+    log_fn: Callable[[str], None],
 ) -> None:
     """
     Apply post-stretch processing to a broadband image.
@@ -84,7 +84,7 @@ def _apply_post_stretch(
         3. Saturation adjustment
         4. VeraLux enhancements (Silentium denoise, Revela detail, Vectra saturation)
     """
-    if config.color_removal_mode != "none":
+    if config.color_removal_mode != ColorRemovalMode.NONE:
         siril.load(image_name)
         apply_color_removal(siril, config, log_fn)
         siril.save(image_name)
@@ -111,7 +111,7 @@ def _apply_veralux_processing(
     source_name: str,
     working_dir: Path,
     config: Config,
-    log_fn: callable,
+    log_fn: Callable[[str], None],
 ) -> None:
     """Apply VeraLux post-processing (Silentium, Revela, Vectra) to stretched image."""
     # Save current state to file for veralux processing
@@ -134,7 +134,7 @@ def _add_stars_back(
     output_name: str,
     working_dir: Path,
     config: Config,
-    log_fn: callable,
+    log_fn: Callable[[str], None],
 ) -> None:
     """Add stars back to starless image using StarComposer (screen blend fallback)."""
     from .veralux_starcomposer import apply_starcomposer
@@ -170,7 +170,7 @@ def _stretch_and_combine_lrgb(
     working_dir: Path,
     output_dir: Path,
     config: Config,
-    log_fn: callable,
+    log_fn: Callable[[str], None],
     use_veralux: bool,
 ) -> str:
     """Stretch RGB and L, combine to LRGB, apply SCNR and saturation."""
@@ -223,7 +223,7 @@ def _save_outputs(
     source_name: str,
     output_dir: Path,
     output_basename: str,
-    log_fn: callable,
+    log_fn: Callable[[str], None],
     config: Config,
 ) -> None:
     """Save FIT, TIF, and JPG outputs."""
@@ -237,9 +237,9 @@ def compose_lrgb(
     stacks_dir: Path,
     output_dir: Path,
     config: Config,
-    log_fn: callable,
-    log_step_fn: callable,
-    log_color_balance_fn: callable,
+    log_fn: Callable[[str], None],
+    log_step_fn: Callable[[str], None],
+    log_color_balance_fn: Callable,
     is_hdr: bool = False,
 ) -> CompositionResult:
     """
@@ -320,17 +320,17 @@ def compose_lrgb(
             log_fn(f"  {ch}: saved")
 
     # Post-stack background extraction (on registered channel stacks)
-    if cfg.post_stack_subsky_method != "none":
+    if cfg.post_stack_subsky_method != SubskyMethod.NONE:
         method_desc = (
             "RBF"
-            if cfg.post_stack_subsky_method == "rbf"
+            if cfg.post_stack_subsky_method == SubskyMethod.RBF
             else f"polynomial degree {cfg.post_stack_subsky_degree}"
         )
         log_fn(f"Post-stack background extraction ({method_desc})...")
         for ch in ["R", "G", "B", "L"]:
             siril.load(ch)
             if siril.subsky(
-                rbf=(cfg.post_stack_subsky_method == "rbf"),
+                rbf=(cfg.post_stack_subsky_method == SubskyMethod.RBF),
                 degree=cfg.post_stack_subsky_degree,
                 samples=cfg.post_stack_subsky_samples,
                 tolerance=cfg.post_stack_subsky_tolerance,
@@ -585,9 +585,9 @@ def compose_rgb(
     stacks_dir: Path,
     output_dir: Path,
     config: Config,
-    log_fn: callable,
-    log_step_fn: callable,
-    log_color_balance_fn: callable,
+    log_fn: Callable[[str], None],
+    log_step_fn: Callable[[str], None],
+    log_color_balance_fn: Callable,
 ) -> CompositionResult:
     """
     Compose RGB image (no luminance channel).
@@ -650,17 +650,17 @@ def compose_rgb(
         log_fn(f"  {ch}: saved")
 
     # Post-stack background extraction (on registered channel stacks)
-    if cfg.post_stack_subsky_method != "none":
+    if cfg.post_stack_subsky_method != SubskyMethod.NONE:
         method_desc = (
             "RBF"
-            if cfg.post_stack_subsky_method == "rbf"
+            if cfg.post_stack_subsky_method == SubskyMethod.RBF
             else f"polynomial degree {cfg.post_stack_subsky_degree}"
         )
         log_fn(f"Post-stack background extraction ({method_desc})...")
         for ch in ["R", "G", "B"]:
             siril.load(ch)
             if siril.subsky(
-                rbf=(cfg.post_stack_subsky_method == "rbf"),
+                rbf=(cfg.post_stack_subsky_method == SubskyMethod.RBF),
                 degree=cfg.post_stack_subsky_degree,
                 samples=cfg.post_stack_subsky_samples,
                 tolerance=cfg.post_stack_subsky_tolerance,

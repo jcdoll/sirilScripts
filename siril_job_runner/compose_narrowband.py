@@ -30,7 +30,14 @@ from .compose_helpers import (
     neutralize_rgb_background,
     save_diagnostic_preview,
 )
-from .config import Config
+from .config import (
+    ColorRemovalMode,
+    Config,
+    StarColor,
+    StarSource,
+    StretchMethod,
+    SubskyMethod,
+)
 from .models import CompositionResult, StackInfo
 from .palettes import build_effective_palette, formula_to_pixelmath, get_palette
 from .siril_file_ops import link_or_copy
@@ -66,7 +73,7 @@ def _separate_stars_linear(
     log_fn("  Star separation enabled, running StarNet on linear data...")
 
     # Determine star source: L if available, else H, or configured channel
-    if cfg.narrowband_star_source == "auto":
+    if cfg.narrowband_star_source == StarSource.AUTO:
         star_source_ch = "L" if has_luminance else "H"
     else:
         star_source_ch = cfg.narrowband_star_source
@@ -141,7 +148,7 @@ def _composite_stars(
 
     # Prepare stars: mono (grayscale) creates white stars
     siril.load(stars_image)
-    if cfg.narrowband_star_color == "mono":
+    if cfg.narrowband_star_color == StarColor.MONO:
         siril.save("_stars_mono")
         siril.rgbcomp(
             r="_stars_mono",
@@ -266,17 +273,17 @@ def compose_narrowband(
         log_fn(f"  {ch}: saved")
 
     # Post-stack background extraction
-    if cfg.post_stack_subsky_method != "none":
+    if cfg.post_stack_subsky_method != SubskyMethod.NONE:
         method_desc = (
             "RBF"
-            if cfg.post_stack_subsky_method == "rbf"
+            if cfg.post_stack_subsky_method == SubskyMethod.RBF
             else f"polynomial degree {cfg.post_stack_subsky_degree}"
         )
         log_fn(f"Post-stack background extraction ({method_desc})...")
         for ch in required:
             siril.load(ch)
             if siril.subsky(
-                rbf=(cfg.post_stack_subsky_method == "rbf"),
+                rbf=(cfg.post_stack_subsky_method == SubskyMethod.RBF),
                 degree=cfg.post_stack_subsky_degree,
                 samples=cfg.post_stack_subsky_samples,
                 tolerance=cfg.post_stack_subsky_tolerance,
@@ -428,7 +435,9 @@ def compose_narrowband(
     # For each stretch method: stretch -> palette -> neutralize -> saturation
     # ==========================================================================
     methods = (
-        ["autostretch", "veralux"] if cfg.stretch_compare else [cfg.stretch_method]
+        [StretchMethod.AUTOSTRETCH, StretchMethod.VERALUX]
+        if cfg.stretch_compare
+        else [cfg.stretch_method]
     )
     if cfg.stretch_compare:
         log_fn("Comparing stretch methods (autostretch vs veralux)...")
@@ -466,7 +475,7 @@ def compose_narrowband(
             log_color_balance_fn(linear_path)
 
         # Step 4: Color removal (SCNR)
-        if cfg.color_removal_mode != "none":
+        if cfg.color_removal_mode != ColorRemovalMode.NONE:
             siril.load("narrowband")
             apply_color_removal(siril, cfg, log_fn)
             siril.save("narrowband")

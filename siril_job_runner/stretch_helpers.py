@@ -8,7 +8,7 @@ Used by both broadband and narrowband composition modules.
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
 
-from .config import Config
+from .config import Config, StretchMethod
 
 if TYPE_CHECKING:
     from .protocols import SirilInterface
@@ -38,7 +38,7 @@ def apply_stretch(
 
     cfg = config
 
-    if method == "autostretch":
+    if method == StretchMethod.AUTOSTRETCH:
         mode = "linked" if cfg.autostretch_linked else "unlinked"
         log_fn(f"Stretching ({method}, {mode}, targetbg={cfg.autostretch_targetbg})...")
         success = siril.autostretch(
@@ -59,7 +59,7 @@ def apply_stretch(
                 log_fn(f"  MTF: low={low}, mid={mid}, high={high}")
                 siril.mtf(low, mid, high)
         return success
-    elif method == "veralux":
+    elif method == StretchMethod.VERALUX:
         log_fn(
             f"Stretching ({method}, target_median={cfg.veralux_target_median}, "
             f"b={cfg.veralux_b})..."

@@ -7,7 +7,7 @@ Contains the core pipeline steps for calibration, registration, and stacking.
 from pathlib import Path
 from typing import Callable, Optional
 
-from .config import Config
+from .config import Config, SubskyMethod
 from .preprocessing_utils import create_sequence_file
 from .protocols import SirilInterface
 from .sequence_analysis import (
@@ -146,10 +146,10 @@ def run_pipeline(
 
     # Pre-stack background extraction (seqsubsky on individual subs)
     # Handles gradients on individual subs before they get combined
-    if cfg.pre_stack_subsky_method != "none":
+    if cfg.pre_stack_subsky_method != SubskyMethod.NONE:
         method_desc = (
             "RBF"
-            if cfg.pre_stack_subsky_method == "rbf"
+            if cfg.pre_stack_subsky_method == SubskyMethod.RBF
             else f"polynomial degree {cfg.pre_stack_subsky_degree}"
         )
         if log_fn:
